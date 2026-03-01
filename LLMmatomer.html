@@ -118,6 +118,41 @@
 
         const generateId = () => Math.random().toString(36).substr(2, 9);
 
+        // マークダウン内のテキスト位置を特定する関数
+        const findMarkdownPosition = (markdown, selectedText) => {
+            if (!selectedText || !markdown) return null;
+
+            // 完全マッチを試みる
+            const exactIndex = markdown.indexOf(selectedText);
+            if (exactIndex !== -1) {
+                return {
+                    startOffset: exactIndex,
+                    endOffset: exactIndex + selectedText.length,
+                    quote: selectedText
+                };
+            }
+
+            // 完全マッチが失敗した場合、部分マッチを試みる
+            // （HTMLレンダリング後に改行やスペースが変わっている可能性）
+            const normalizedSelected = selectedText.trim().replace(/\s+/g, ' ');
+            const words = normalizedSelected.split(/\s+/);
+
+            // 単語の並びで検索
+            for (let i = 0; i < markdown.length - normalizedSelected.length; i++) {
+                const candidate = markdown.slice(i, i + normalizedSelected.length);
+                const normalizedCandidate = candidate.trim().replace(/\s+/g, ' ');
+                if (normalizedCandidate === normalizedSelected) {
+                    return {
+                        startOffset: i,
+                        endOffset: i + candidate.length,
+                        quote: candidate
+                    };
+                }
+            }
+
+            return null;
+        };
+
         // LaTeX記号と数学フォント、改行を削除してテキストを正規化
         const sanitizeQuote = (text) => {
             // 複数行の改行を1つのスペースに統一
@@ -259,17 +294,20 @@
                             if (index >= annotations.length) return;
                             const anno = annotations[index];
 
-                            if (!anno.quote) {
+                            // 位置情報を優先的に使用、なければ quote を使用
+                            const quoteText = anno.position?.quote || anno.quote;
+
+                            if (!quoteText) {
                                 markNext(index + 1);
                                 return;
                             }
 
-                            console.log('[Mark.js Debug] Searching for:', anno.quote, 'ID:', anno.id);
+                            console.log('[Mark.js Debug] Searching for:', quoteText, 'using', anno.position ? 'position' : 'quote', 'ID:', anno.id);
 
                             const activeClass = activeAnnotationId === anno.id ? 'active' : '';
 
                             // 複数行のテキストに対応：改行をスペースに統一して検索
-                            const searchText = anno.quote.replace(/\n+/g, ' ');
+                            const searchText = quoteText.replace(/\n+/g, ' ');
 
                             markerRef.current.mark(searchText, {
                                 className: `annotation-mark ${activeClass}`,
@@ -857,13 +895,22 @@
                     const selection = window.getSelection();
                     const text = selection.toString().trim();
 
-                    // デバッグ: コンソールに記録
-                    const sanitized = sanitizeQuote(text);
-                    console.log('[Annotation Debug] Selected text:', text);
-                    console.log('[Annotation Debug] Sanitized:', sanitized);
-                    console.log('[Annotation Debug] Text length:', text.length, '→', sanitized.length);
-
                     if (text.length >= 2 && selection.rangeCount > 0) {
+                        // マークダウンテキストを取得
+                        let markdownText = '';
+                        if (targetId === 'main') {
+                            markdownText = mainText;
+                        } else {
+                            const anno = annotations.find(a => a.id === targetId);
+                            markdownText = anno?.content || '';
+                        }
+
+                        // マークダウン内の位置を計算
+                        const position = findMarkdownPosition(markdownText, text);
+
+                        console.log('[Selection] Text:', text);
+                        console.log('[Selection] Position found:', position);
+
                         const range = selection.getRangeAt(0);
                         const rect = range.getBoundingClientRect();
 
@@ -872,6 +919,7 @@
                             top: Math.max(10, rect.top - 45),
                             left: rect.left + (rect.width / 2),
                             text: text,
+                            position: position,  // マークダウン位置情報を追加
                             paneIndex: paneIndex,
                             targetId: targetId
                         });
@@ -921,21 +969,30 @@
                 });
             };
 
-            const startAddAnnotation = (paneIndex, targetId, quote) => {
+            const startAddAnnotation = (paneIndex, targetId, quote, position) => {
                 setPanes(prev => {
                     const newPanes = prev.slice(0, paneIndex + 1);
                     newPanes.push({
                         id: generateId(),
                         type: 'add',
                         targetId: targetId,
-                        quote: sanitizeQuote(quote)
+                        quote: quote || '',
+                        position: position  // マークダウン位置情報を保存
                     });
                     return newPanes;
                 });
             };
 
-            const saveNewAnnotation = (paneIndex, targetId, quote, title, content) => {
-                const newAnno = { id: generateId(), targetId, quote: sanitizeQuote(quote), title, content, timestamp: Date.now() };
+            const saveNewAnnotation = (paneIndex, targetId, quote, title, content, position) => {
+                const newAnno = {
+                    id: generateId(),
+                    targetId,
+                    quote: quote || '',
+                    position: position,  // マークダウン位置情報を保存
+                    title,
+                    content,
+                    timestamp: Date.now()
+                };
                 setAnnotations(prev => [...prev, newAnno]);
 
                 setPanes(prev => {
@@ -951,8 +1008,8 @@
                 window.getSelection().removeAllRanges();
             };
 
-            const updateAnnotation = (paneIndex, annotationId, title, content, quoteText) => {
-                setAnnotations(prev => prev.map(a => a.id === annotationId ? { ...a, title, content, quote: quoteText || a.quote, timestamp: Date.now() } : a));
+            const updateAnnotation = (paneIndex, annotationId, title, content, quoteText, position) => {
+                setAnnotations(prev => prev.map(a => a.id === annotationId ? { ...a, title, content, quote: quoteText || a.quote, position: position || a.position, timestamp: Date.now() } : a));
                 setPanes(prev => {
                     const newPanes = [...prev];
                     newPanes[paneIndex] = { ...newPanes[paneIndex], type: 'view' };
@@ -1093,8 +1150,8 @@
                                     parentTitle={parentTitle}
                                     initialData={initialData}
                                     onSave={(title, content, quoteText) => isAdd
-                                        ? saveNewAnnotation(index, pane.targetId, quoteText || quote, title, content)
-                                        : updateAnnotation(index, pane.annotationId, title, content, quoteText)
+                                        ? saveNewAnnotation(index, pane.targetId, quoteText || quote, title, content, pane.position)
+                                        : updateAnnotation(index, pane.annotationId, title, content, quoteText, pane.position)
                                     }
                                     onCancel={() => {
                                         if (isAdd) closePane(index);
@@ -1224,7 +1281,7 @@
                                         className="text-sm font-bold text-blue-300 hover:text-blue-100 flex items-center gap-1.5 whitespace-nowrap"
                                         onMouseDown={(e) => {
                                             e.preventDefault();
-                                            startAddAnnotation(selectionMenu.paneIndex, selectionMenu.targetId, selectionMenu.text);
+                                            startAddAnnotation(selectionMenu.paneIndex, selectionMenu.targetId, selectionMenu.text, selectionMenu.position);
                                             setSelectionMenu({ show: false });
                                             window.getSelection().removeAllRanges();
                                         }}
