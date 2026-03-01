@@ -120,12 +120,9 @@
 
         // マークダウン内のテキスト位置を特定する関数
         const findMarkdownPosition = (markdown, selectedText) => {
-            if (!selectedText || !markdown) {
-                console.log('[findMarkdownPosition] Missing input:', { hasMarkdown: !!markdown, hasText: !!selectedText });
-                return null;
-            }
+            if (!selectedText || !markdown) return null;
 
-            console.log('[findMarkdownPosition] Searching:', { selectedText, markdownLength: markdown.length });
+            console.log('[findMarkdownPosition] Searching for:', selectedText.slice(0, 60));
 
             // 完全マッチを試みる
             const exactIndex = markdown.indexOf(selectedText);
@@ -138,30 +135,51 @@
                 };
             }
 
-            console.log('[findMarkdownPosition] No exact match, trying normalized search...');
+            // 改行・複数空白を正規化して検索（HTMLレンダリング後の改行に対応）
+            const normalizeForSearch = (text) => {
+                return text.replace(/\s+/g, ' ').trim();
+            };
 
-            // 完全マッチが失敗した場合、部分マッチを試みる
-            const normalizedSelected = selectedText.trim().replace(/\s+/g, ' ');
-            console.log('[findMarkdownPosition] Normalized text:', normalizedSelected);
+            const normalized = normalizeForSearch(selectedText);
+            console.log('[findMarkdownPosition] Normalized to:', normalized.slice(0, 60));
 
-            // 単語の並びで検索
-            for (let i = 0; i < markdown.length - normalizedSelected.length; i++) {
-                const candidate = markdown.slice(i, i + normalizedSelected.length);
-                const normalizedCandidate = candidate.trim().replace(/\s+/g, ' ');
-                if (normalizedCandidate === normalizedSelected) {
-                    console.log('[findMarkdownPosition] ✓ Normalized match found at:', i);
+            // マークダウンから対応する部分を探す（ローリングウィンドウ）
+            for (let i = 0; i < markdown.length; i++) {
+                let j = i;
+                let selectedIdx = 0;
+
+                // 文字単位でマッチング（空白を柔軟に扱う）
+                while (j < markdown.length && selectedIdx < normalized.length) {
+                    const markdownChar = markdown[j];
+                    const normalizedChar = normalized[selectedIdx];
+
+                    if (/\s/.test(markdownChar)) {
+                        // マークダウン側が空白なら、スキップして次の非空白文字へ
+                        j++;
+                    } else if (/\s/.test(normalizedChar)) {
+                        // 正規化版が空白なら、正規化版の次の非空白へ
+                        selectedIdx++;
+                    } else if (markdownChar === normalizedChar) {
+                        j++;
+                        selectedIdx++;
+                    } else {
+                        break;  // マッチ失敗
+                    }
+                }
+
+                // 全文字マッチしたか確認
+                if (selectedIdx === normalized.length) {
+                    console.log('[findMarkdownPosition] ✓ Match found at:', i, 'length:', j - i);
                     return {
                         startOffset: i,
-                        endOffset: i + candidate.length,
-                        quote: candidate
+                        endOffset: j,
+                        quote: markdown.slice(i, j)
                     };
                 }
             }
 
             console.log('[findMarkdownPosition] ✗ No match found');
-            console.log('[findMarkdownPosition] Selected (first 50 chars):', selectedText.slice(0, 50));
-            console.log('[findMarkdownPosition] Markdown (first 200 chars):', markdown.slice(0, 200));
-
+            console.log('[findMarkdownPosition] Markdown sample:', markdown.slice(0, 100));
             return null;
         };
 
