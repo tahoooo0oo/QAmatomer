@@ -199,19 +199,14 @@
                 const anchorNum = sorted.length - idx; // 後ろから挿入するので逆順
                 let pos = anno.position.endOffset;
 
-                // endOffset から次のスペースまたは改行を探す
+                // endOffset から次の改行を探す
                 if (pos !== undefined && pos >= 0) {
                     const remaining = result.slice(pos);
-                    const spaceMatch = remaining.match(/\s/); // 最初のスペース/改行を探す
-                    if (spaceMatch) {
-                        pos = pos + spaceMatch.index;
-                    } else if (pos < result.length) {
-                        // スペースが見つからなければ、最後の単語の後まで移動
-                        const wordMatch = remaining.match(/\S+/);
-                        if (wordMatch) {
-                            pos = pos + wordMatch.index + wordMatch[0].length;
-                        }
+                    const newlineMatch = remaining.match(/\n/); // 最初の改行を探す
+                    if (newlineMatch) {
+                        pos = pos + newlineMatch.index;
                     }
+                    // 改行がなければ endOffset のままで挿入
                 }
 
                 if (pos !== undefined && pos >= 0 && pos <= result.length) {
@@ -247,7 +242,7 @@
         };
 
         // --- コンポーネント: Markdown & KaTeX & Highlight ビュワー ---
-        const MarkdownViewer = ({ content, className = "markdown-body", annotations = [], onMarkClick, onMultiMarkClick, onMarkHover, activeAnnotationId }) => {
+        const MarkdownViewer = ({ content, className = "markdown-body", annotations = [], onMarkClick, onMultiMarkClick, onMarkHover, activeAnnotationId, onAnnotationClick }) => {
             const contentRef = useRef(null);
             const markerRef = useRef(null);
 
@@ -360,13 +355,12 @@
                     // 注釈アンカーのクリックハンドラーを設定
                     const anchors = contentRef.current.querySelectorAll('.annotation-anchor');
                     anchors.forEach(anchor => {
-                        anchor.addEventListener('click', () => {
+                        anchor.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
                             const annoId = anchor.dataset.annoId;
-                            if (annoId) {
-                                const anno = annotations.find(a => a.id === annoId);
-                                if (anno) {
-                                    setActiveAnnotationId(anno.id);
-                                }
+                            if (annoId && onAnnotationClick) {
+                                onAnnotationClick(annoId);
                             }
                         });
 
@@ -1116,6 +1110,7 @@
                                             onMarkClick={(id) => openAnnotation(index, id)}
                                             onMultiMarkClick={(ids, rect) => handleMultiMarkClick(index, ids, rect)}
                                             onMarkHover={handleMarkHover}
+                                            onAnnotationClick={(annoId) => openAnnotation(index, annoId)}
                                             activeAnnotationId={activeAnnoId}
                                         />
                                     </div>
@@ -1165,6 +1160,7 @@
                                             onMarkClick={(id) => openAnnotation(index, id)}
                                             onMultiMarkClick={(ids, rect) => handleMultiMarkClick(index, ids, rect)}
                                             onMarkHover={handleMarkHover}
+                                            onAnnotationClick={(annoId) => openAnnotation(index, annoId)}
                                             activeAnnotationId={activeAnnoId}
                                         />
                                     </div>
