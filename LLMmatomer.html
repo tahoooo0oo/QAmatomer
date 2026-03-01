@@ -237,6 +237,8 @@
                                 return;
                             }
 
+                            console.log('[Mark.js Debug] Searching for:', anno.quote, 'ID:', anno.id);
+
                             const activeClass = activeAnnotationId === anno.id ? 'active' : '';
 
                             markerRef.current.mark(anno.quote, {
@@ -245,7 +247,6 @@
                                 separateWordSearch: false,
                                 diacritics: false,
                                 caseSensitive: false,
-                                exclude: [".katex *", ".katex", "code", "pre"],
                                 each: (el) => {
                                     el.dataset.annoId = anno.id;
                                     el.onmouseenter = () => {
@@ -290,7 +291,8 @@
                                         }
                                     };
                                 },
-                                done: () => {
+                                done: (count) => {
+                                    console.log('[Mark.js Debug] Matched:', count, 'occurrences for:', anno.quote);
                                     if (!isCancelled) markNext(index + 1);
                                 }
                             });
@@ -817,6 +819,10 @@
                 setTimeout(() => {
                     const selection = window.getSelection();
                     const text = selection.toString().trim();
+
+                    // デバッグ: コンソールに記録
+                    console.log('[Annotation Debug] Selected text:', text);
+                    console.log('[Annotation Debug] Sanitized:', sanitizeQuote(text));
 
                     if (text.length >= 2 && selection.rangeCount > 0) {
                         const range = selection.getRangeAt(0);
