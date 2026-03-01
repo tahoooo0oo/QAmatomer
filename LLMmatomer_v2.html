@@ -1042,6 +1042,43 @@
                 setPanes(prev => prev.slice(0, index));
             };
 
+            // パンくずリスト用のヘルパー関数
+            const buildBreadcrumbPath = (paneIndex) => {
+                const path = [];
+                for (let i = 0; i <= paneIndex; i++) {
+                    const pane = panes[i];
+                    if (pane.type === 'main') {
+                        path.push({ type: 'main', title: 'メインテキスト', icon: 'ph-book-open' });
+                    } else if (pane.type === 'view') {
+                        const anno = annotations.find(a => a.id === pane.annotationId);
+                        if (anno) {
+                            path.push({ type: 'annotation', title: anno.title, icon: 'ph-chat-teardrop-text', id: anno.id });
+                        }
+                    }
+                }
+                return path;
+            };
+
+            // パンくずコンポーネント
+            const BreadcrumbTrail = ({ path }) => (
+                <div className="flex items-center gap-1 text-xs px-2 py-1 bg-gray-50 border-b border-gray-100">
+                    {path.map((item, idx) => (
+                        <div key={idx} className="flex items-center gap-1">
+                            {idx > 0 && <span className="text-gray-300 text-sm">›</span>}
+                            <div className="group relative">
+                                <div className="inline-flex items-center gap-1 text-gray-600 hover:text-blue-600 transition-colors">
+                                    <i className={`ph-fill ${item.icon} text-xs`}></i>
+                                    <span className="max-w-[80px] truncate text-[11px] font-medium">{item.title}</span>
+                                </div>
+                                <div className="absolute bottom-full left-0 mb-1 px-2 py-1 bg-gray-800 text-white text-[10px] rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-20">
+                                    {item.title}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+
             // 各ペインのレンダリング
             const renderPanes = () => {
                 const elements = panes.map((pane, index) => {
@@ -1049,8 +1086,10 @@
                     const activeAnnoId = nextPane && (nextPane.type === 'view' || nextPane.type === 'edit') ? nextPane.annotationId : null;
 
                     if (pane.type === 'main') {
+                        const breadcrumb = buildBreadcrumbPath(index);
                         return (
                             <div key={pane.id} className="w-[90vw] md:w-[50vw] lg:w-[45vw] shrink-0 h-full bg-white border-r border-gray-200 flex flex-col relative shadow-[4px_0_24px_rgba(0,0,0,0.06)] z-0">
+                                {breadcrumb.length > 1 && <BreadcrumbTrail path={breadcrumb} />}
                                 <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-white shrink-0 shadow-sm z-10">
                                     <h2 className="text-[15px] font-bold text-gray-700 flex items-center gap-2 uppercase tracking-wide">
                                         <i className="ph-fill ph-book-open text-blue-500 text-lg"></i>
@@ -1085,8 +1124,10 @@
                         const anno = annotations.find(a => a.id === pane.annotationId);
                         if (!anno) return null;
 
+                        const breadcrumb = buildBreadcrumbPath(index);
                         return (
                             <div key={pane.id} className="w-[90vw] md:w-[50vw] lg:w-[45vw] shrink-0 h-full bg-white border-r border-gray-200 flex flex-col relative shadow-[4px_0_24px_rgba(0,0,0,0.06)] animate-slide-in-right z-0">
+                                {breadcrumb.length > 0 && <BreadcrumbTrail path={breadcrumb} />}
                                 <div className="p-4 border-b border-gray-200 bg-slate-50 flex items-center justify-between shrink-0 shadow-sm z-10">
                                     <div className="flex items-center gap-2 overflow-hidden">
                                         <i className="ph-fill ph-chat-teardrop-text text-blue-500 text-xl shrink-0"></i>
