@@ -126,6 +126,28 @@
             color: #d97706;
             font-weight: 800;
         }
+
+        /* Annotation anchor in margin */
+        .annotation-anchor-margin {
+            background-color: transparent;
+            border: none;
+            color: #f59e0b;
+            font-weight: 700;
+            font-size: 0.9em;
+            cursor: pointer;
+            transition: all 0.15s;
+            padding: 0;
+            width: 100%;
+            text-align: center;
+        }
+        .annotation-anchor-margin:hover {
+            color: #d97706;
+            text-decoration: underline;
+        }
+        .annotation-anchor-margin.active {
+            color: #d97706;
+            font-weight: 800;
+        }
     </style>
 </head>
 <body>
@@ -251,6 +273,7 @@
         const MarkdownViewer = ({ content, className = "markdown-body", annotations = [], onMarkClick, onMultiMarkClick, onMarkHover, activeAnnotationId, onAnnotationClick }) => {
             const contentRef = useRef(null);
             const markerRef = useRef(null);
+            const anchorsContainerRef = useRef(null);
 
             const callbacksRef = useRef({ onMarkClick, onMultiMarkClick, onMarkHover });
             useEffect(() => {
@@ -290,9 +313,7 @@
                         return id;
                     });
 
-                    // 注釈のアンカーを inject
-                    processedText = injectAnnotationAnchors(processedText, annotations);
-
+                    // Note: アンカーはマージン領域に配置するため、ここでは inject しない
                     let html = marked.parse(processedText);
 
                     // LaTeX を data-latex 属性で埋め込む
@@ -379,19 +400,103 @@
             // Annotation anchor のアクティブ状態を更新
             useEffect(() => {
                 const anchors = contentRef.current?.querySelectorAll('.annotation-anchor');
-                if (!anchors) return;
+                if (anchors) {
+                    anchors.forEach(anchor => {
+                        const annoId = anchor.dataset.annoId;
+                        if (activeAnnotationId === annoId) {
+                            anchor.classList.add('active');
+                        } else {
+                            anchor.classList.remove('active');
+                        }
+                    });
+                }
 
-                anchors.forEach(anchor => {
-                    const annoId = anchor.dataset.annoId;
-                    if (activeAnnotationId === annoId) {
-                        anchor.classList.add('active');
-                    } else {
-                        anchor.classList.remove('active');
-                    }
-                });
+                // マージンのアンカーも同時に更新
+                const marginAnchors = anchorsContainerRef.current?.querySelectorAll('.annotation-anchor-margin');
+                if (marginAnchors) {
+                    marginAnchors.forEach(anchor => {
+                        const annoId = anchor.dataset.annoId;
+                        if (activeAnnotationId === annoId) {
+                            anchor.classList.add('active');
+                        } else {
+                            anchor.classList.remove('active');
+                        }
+                    });
+                }
             }, [activeAnnotationId]);
 
-            return <div ref={contentRef} className={className}></div>;
+            // マージン内にアンカーを配置
+            useEffect(() => {
+                if (!contentRef.current || !anchorsContainerRef.current || annotations.length === 0) return;
+
+                // マージンをクリア
+                anchorsContainerRef.current.innerHTML = '';
+                let currentY = 0;
+
+                // 各注釈について、quote に基づいてアンカー位置を計算
+                annotations.forEach((anno, idx) => {
+                    if (!anno.quote) return;
+
+                    // contentRef 内でテキストを検索
+                    const treeWalker = document.createTreeWalker(
+                        contentRef.current,
+                        NodeFilter.SHOW_TEXT,
+                        null,
+                        false
+                    );
+
+                    let node;
+                    let found = false;
+                    while (node = treeWalker.nextNode()) {
+                        if (node.textContent.includes(anno.quote)) {
+                            // quote を含むテキストノードを見つけた
+                            const range = document.createRange();
+                            range.selectNodeContents(node);
+                            const rect = range.getBoundingClientRect();
+                            const containerRect = contentRef.current.getBoundingClientRect();
+
+                            // 相対位置を計算
+                            const relativeY = rect.bottom - containerRect.top;
+
+                            // マージンにアンカーを作成
+                            const anchorNum = idx + 1;
+                            const marginAnchor = document.createElement('button');
+                            marginAnchor.className = 'annotation-anchor-margin';
+                            marginAnchor.textContent = `[${anchorNum}]`;
+                            marginAnchor.dataset.annoId = anno.id;
+                            marginAnchor.style.position = 'absolute';
+                            marginAnchor.style.top = `${currentY}px`;
+                            marginAnchor.style.cursor = 'pointer';
+
+                            marginAnchor.addEventListener('click', (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (onAnnotationClick) {
+                                    onAnnotationClick(anno.id);
+                                }
+                            });
+
+                            anchorsContainerRef.current.appendChild(marginAnchor);
+                            currentY += 30; // 次のアンカー位置
+                            found = true;
+                            break;
+                        }
+                    }
+                });
+            }, [content, annotations]);
+
+            return (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 5%', gap: '1rem', width: '100%' }}>
+                    <div ref={contentRef} className={className}></div>
+                    <div
+                        ref={anchorsContainerRef}
+                        style={{
+                            position: 'relative',
+                            minHeight: '100%'
+                        }}
+                    ></div>
+                </div>
+            );
         };
 
         // --- コンポーネント: ホーム画面（プロジェクト一覧） ---
