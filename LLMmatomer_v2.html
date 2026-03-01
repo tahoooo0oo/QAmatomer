@@ -24,9 +24,6 @@
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
 
-    <!-- mark.js (Text Highlighting) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mark.js/8.11.1/mark.min.js"></script>
-
     <style>
         /* カスタムアニメーション */
         @keyframes fadeInUp {
@@ -118,6 +115,22 @@
 
         const generateId = () => Math.random().toString(36).substr(2, 9);
 
+        // 選択範囲からKaTeX数式をLaTeX形式に復元してテキストを取得
+        const getQuoteFromSelection = (range) => {
+            const fragment = range.cloneContents();
+            const tempDiv = document.createElement('div');
+            tempDiv.appendChild(fragment);
+            tempDiv.querySelectorAll('.katex-display').forEach(el => {
+                const ann = el.querySelector('annotation[encoding="application/x-tex"]');
+                if (ann) el.replaceWith('$$' + ann.textContent.trim() + '$$');
+            });
+            tempDiv.querySelectorAll('.katex').forEach(el => {
+                const ann = el.querySelector('annotation[encoding="application/x-tex"]');
+                if (ann) el.replaceWith('$' + ann.textContent.trim() + '$');
+            });
+            return tempDiv.textContent.trim();
+        };
+
         // --- LocalStorage ヘルパー ---
         const Storage = {
             getProjectList() {
@@ -144,7 +157,6 @@
         // --- コンポーネント: Markdown & KaTeX & Highlight ビュワー ---
         const MarkdownViewer = ({ content, className = "markdown-body", annotations = [], onMarkClick, onMultiMarkClick, onMarkHover, activeAnnotationId }) => {
             const contentRef = useRef(null);
-            const markerRef = useRef(null);
 
             const callbacksRef = useRef({ onMarkClick, onMultiMarkClick, onMarkHover });
             useEffect(() => {
@@ -206,7 +218,6 @@
                         console.error("KaTeX rendering error:", e);
                     }
 
-                    markerRef.current = new Mark(contentRef.current);
                 }
             }, [content]);
 
@@ -256,89 +267,139 @@
                 return () => el.removeEventListener('copy', handleCopy);
             }, []);
 
+            // 仮想テキスト(テキストノード + KaTeX→LaTeX)ベースのカスタムハイライト
             useEffect(() => {
-                if (!markerRef.current) return;
+                const root = contentRef.current;
+                if (!root) return;
 
-                let isCancelled = false;
-
-                markerRef.current.unmark({
-                    done: () => {
-                        if (isCancelled || !annotations || annotations.length === 0) return;
-
-                        const markNext = (index) => {
-                            if (isCancelled) return;
-                            if (index >= annotations.length) return;
-                            const anno = annotations[index];
-
-                            if (!anno.quote) {
-                                markNext(index + 1);
-                                return;
-                            }
-
-                            const activeClass = activeAnnotationId === anno.id ? 'active' : '';
-
-                            markerRef.current.mark(anno.quote, {
-                                className: `annotation-mark ${activeClass}`,
-                                acrossElements: true,
-                                separateWordSearch: false,
-                                diacritics: false,
-                                exclude: [".katex *", ".katex", "code", "pre"],
-                                each: (el) => {
-                                    el.dataset.annoId = anno.id;
-                                    el.onmouseenter = () => {
-                                        if (callbacksRef.current.onMarkHover) {
-                                            const rect = el.getBoundingClientRect();
-                                            const titles = [];
-                                            let n = el;
-                                            while (n) {
-                                                if (n.dataset && n.dataset.annoId) {
-                                                    const a = annotations.find(x => x.id === n.dataset.annoId);
-                                                    if (a && a.title && !titles.includes(a.title)) titles.push(a.title);
-                                                }
-                                                if (n === contentRef.current) break;
-                                                n = n.parentElement;
-                                            }
-                                            callbacksRef.current.onMarkHover(true, titles.length > 1 ? titles.join(' / ') : (anno.title || '注釈を表示'), rect);
-                                        }
-                                    };
-                                    el.onmouseleave = () => {
-                                        if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false);
-                                    };
-
-                                    el.onclick = (e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        window.getSelection().removeAllRanges();
-                                        if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false);
-                                        const annoIds = [];
-                                        let node = e.target;
-                                        while (node) {
-                                            if (node.dataset && node.dataset.annoId) {
-                                                if (!annoIds.includes(node.dataset.annoId)) annoIds.push(node.dataset.annoId);
-                                            }
-                                            if (node === contentRef.current) break;
-                                            node = node.parentElement;
-                                        }
-                                        if (annoIds.length > 1 && callbacksRef.current.onMultiMarkClick) {
-                                            const rect = el.getBoundingClientRect();
-                                            callbacksRef.current.onMultiMarkClick(annoIds, rect);
-                                        } else {
-                                            if (callbacksRef.current.onMarkClick) callbacksRef.current.onMarkClick(annoIds[0] || anno.id);
-                                        }
-                                    };
-                                },
-                                done: () => {
-                                    if (!isCancelled) markNext(index + 1);
-                                }
-                            });
-                        };
-
-                        markNext(0);
-                    }
+                // 既存のハイライトをクリア
+                root.querySelectorAll('.annotation-mark').forEach(mark => {
+                    const parent = mark.parentNode;
+                    while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+                    parent.removeChild(mark);
                 });
+                root.normalize();
+
+                const parsedAnnotations = JSON.parse(annotationsStr);
+                if (!parsedAnnotations || parsedAnnotations.length === 0) return;
+
+                // 仮想テキストを構築（テキストノードはそのまま、KaTeXはLaTeX形式 $...$ / $$...$$）
+                const segments = [];
+                let vOffset = 0;
+                const walkDom = (node) => {
+                    if (node.nodeType === 3) {
+                        const t = node.textContent;
+                        if (t.length > 0) {
+                            segments.push({ type: 'text', node, text: t, vStart: vOffset, vEnd: vOffset + t.length });
+                            vOffset += t.length;
+                        }
+                        return;
+                    }
+                    if (node.nodeType !== 1) return;
+                    if (node.classList.contains('katex-display')) {
+                        const ann = node.querySelector('annotation[encoding="application/x-tex"]');
+                        if (ann) {
+                            const t = '$$' + ann.textContent.trim() + '$$';
+                            segments.push({ type: 'katex-display', node, text: t, vStart: vOffset, vEnd: vOffset + t.length });
+                            vOffset += t.length;
+                        }
+                        return;
+                    }
+                    if (node.classList.contains('katex')) {
+                        const ann = node.querySelector('annotation[encoding="application/x-tex"]');
+                        if (ann) {
+                            const t = '$' + ann.textContent.trim() + '$';
+                            segments.push({ type: 'katex', node, text: t, vStart: vOffset, vEnd: vOffset + t.length });
+                            vOffset += t.length;
+                        }
+                        return;
+                    }
+                    for (const child of Array.from(node.childNodes)) walkDom(child);
+                };
+                walkDom(root);
+                const virtualText = segments.map(s => s.text).join('');
+
+                // 各注釈の引用を仮想テキスト内で検索
+                const allMatches = [];
+                for (const anno of parsedAnnotations) {
+                    if (!anno.quote) continue;
+                    const idx = virtualText.indexOf(anno.quote);
+                    if (idx === -1) continue;
+                    allMatches.push({ id: anno.id, title: anno.title, start: idx, end: idx + anno.quote.length });
+                }
+                if (allMatches.length === 0) return;
+
+                // ハイライト要素のイベントハンドラ
+                const setupEvents = (el, covering) => {
+                    el.onmouseenter = () => {
+                        if (callbacksRef.current.onMarkHover) {
+                            const rect = el.getBoundingClientRect();
+                            const titles = covering.map(m => m.title).filter(Boolean);
+                            callbacksRef.current.onMarkHover(true, titles.length > 1 ? titles.join(' / ') : (titles[0] || '注釈を表示'), rect);
+                        }
+                    };
+                    el.onmouseleave = () => {
+                        if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false);
+                    };
+                    el.onclick = (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        window.getSelection().removeAllRanges();
+                        if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false);
+                        const ids = covering.map(m => m.id);
+                        if (ids.length > 1 && callbacksRef.current.onMultiMarkClick) {
+                            callbacksRef.current.onMultiMarkClick(ids, el.getBoundingClientRect());
+                        } else if (callbacksRef.current.onMarkClick) {
+                            callbacksRef.current.onMarkClick(ids[0]);
+                        }
+                    };
+                };
+
+                // セグメントを逆順に処理（DOM変更が前方セグメントに影響しないように）
+                for (let i = segments.length - 1; i >= 0; i--) {
+                    const seg = segments[i];
+                    const overlapping = allMatches.filter(m => m.start < seg.vEnd && m.end > seg.vStart);
+                    if (overlapping.length === 0) continue;
+
+                    if (seg.type === 'katex' || seg.type === 'katex-display') {
+                        const wrapper = document.createElement('span');
+                        wrapper.className = 'annotation-mark' + (overlapping.some(m => m.id === activeAnnotationId) ? ' active' : '');
+                        wrapper.dataset.annoId = overlapping[0].id;
+                        if (seg.type === 'katex-display') wrapper.style.display = 'block';
+                        setupEvents(wrapper, overlapping);
+                        seg.node.parentNode.insertBefore(wrapper, seg.node);
+                        wrapper.appendChild(seg.node);
+                    } else if (seg.type === 'text') {
+                        const text = seg.node.textContent;
+                        const boundaries = new Set([0, text.length]);
+                        for (const m of overlapping) {
+                            boundaries.add(Math.max(0, m.start - seg.vStart));
+                            boundaries.add(Math.min(text.length, m.end - seg.vStart));
+                        }
+                        const sorted = Array.from(boundaries).sort((a, b) => a - b);
+                        const frag = document.createDocumentFragment();
+                        for (let j = 0; j < sorted.length - 1; j++) {
+                            const s = sorted[j], e = sorted[j + 1];
+                            const sub = text.substring(s, e);
+                            if (!sub) continue;
+                            const fragVS = seg.vStart + s, fragVE = seg.vStart + e;
+                            const covering = overlapping.filter(m => m.start <= fragVS && m.end >= fragVE);
+                            if (covering.length > 0) {
+                                const span = document.createElement('span');
+                                span.className = 'annotation-mark' + (covering.some(m => m.id === activeAnnotationId) ? ' active' : '');
+                                span.dataset.annoId = covering[0].id;
+                                span.textContent = sub;
+                                setupEvents(span, covering);
+                                frag.appendChild(span);
+                            } else {
+                                frag.appendChild(document.createTextNode(sub));
+                            }
+                        }
+                        seg.node.parentNode.replaceChild(frag, seg.node);
+                    }
+                }
 
                 return () => {
-                    isCancelled = true;
                     if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false);
                 };
             }, [content, annotationsStr, activeAnnotationId]);
@@ -853,17 +914,18 @@
             const handleMouseUp = (e, paneIndex, targetId) => {
                 setTimeout(() => {
                     const selection = window.getSelection();
-                    const text = selection.toString().trim();
+                    const plainText = selection.toString().trim();
 
-                    if (text.length >= 2 && selection.rangeCount > 0) {
+                    if (plainText.length >= 2 && selection.rangeCount > 0) {
                         const range = selection.getRangeAt(0);
                         const rect = range.getBoundingClientRect();
+                        const quote = getQuoteFromSelection(range);
 
                         setSelectionMenu({
                             show: true,
                             top: Math.max(10, rect.top - 45),
                             left: rect.left + (rect.width / 2),
-                            text: text,
+                            text: quote || plainText,
                             paneIndex: paneIndex,
                             targetId: targetId
                         });
