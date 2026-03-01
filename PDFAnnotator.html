@@ -163,7 +163,7 @@
         };
 
         // Annotation Form
-        const AnnotationForm = ({ mode, initialData, onSave, onCancel }) => {
+        const AnnotationForm = ({ mode, initialData, rect, onSave, onCancel }) => {
             const [title, setTitle] = useState(initialData?.title || '');
             const [content, setContent] = useState(initialData?.content || '');
 
@@ -203,7 +203,7 @@
                             キャンセル
                         </button>
                         <button
-                            onClick={() => onSave(title, content)}
+                            onClick={() => onSave(title, content, rect)}
                             disabled={!title.trim() || !content.trim()}
                             className="px-6 py-2.5 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
                         >
@@ -419,8 +419,9 @@
                         <div className="w-96 border-l border-gray-200 bg-white">
                             <AnnotationForm
                                 mode="add"
-                                onSave={(title, content) => {
-                                    setAnnotations(prev => [...prev, { id: generateId(), page: currentPage, title, content, timestamp: Date.now() }]);
+                                rect={panes[0].rect}
+                                onSave={(title, content, rect) => {
+                                    setAnnotations(prev => [...prev, { id: generateId(), page: currentPage, rect, title, content, timestamp: Date.now() }]);
                                     setPanes([]);
                                 }}
                                 onCancel={() => setPanes([])}
@@ -449,7 +450,12 @@
         const PDFPage = ({ doc, page, scale, annotations, onAnnotationClick }) => {
             const canvasRef = useRef(null);
             const containerRef = useRef(null);
+            const svgRef = useRef(null);
             const [pageHeight, setPageHeight] = useState(0);
+            const [pageWidth, setPageWidth] = useState(0);
+            const [isDragging, setIsDragging] = useState(false);
+            const [dragStart, setDragStart] = useState(null);
+            const [dragEnd, setDragEnd] = useState(null);
 
             useEffect(() => {
                 const renderPage = async () => {
@@ -460,6 +466,7 @@
                     canvas.width = viewport.width;
                     canvas.height = viewport.height;
                     setPageHeight(viewport.height);
+                    setPageWidth(viewport.width);
 
                     await pdfPage.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
                 };
@@ -467,20 +474,82 @@
                 renderPage();
             }, [doc, page, scale]);
 
+            const handleSvgMouseDown = (e) => {
+                if (e.button !== 0) return; // Left click only
+                const svg = svgRef.current;
+                const rect = svg.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                setIsDragging(true);
+                setDragStart({ x, y });
+                setDragEnd({ x, y });
+            };
+
+            const handleSvgMouseMove = (e) => {
+                if (!isDragging) return;
+                const svg = svgRef.current;
+                const rect = svg.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                setDragEnd({ x, y });
+            };
+
+            const handleSvgMouseUp = (e) => {
+                if (!isDragging || !dragStart || !dragEnd) {
+                    setIsDragging(false);
+                    return;
+                }
+
+                const width = Math.abs(dragEnd.x - dragStart.x);
+                const height = Math.abs(dragEnd.y - dragStart.y);
+
+                // Ignore tiny selections (accidental clicks)
+                if (width < 10 || height < 10) {
+                    setIsDragging(false);
+                    return;
+                }
+
+                const rectData = {
+                    x: Math.min(dragStart.x, dragEnd.x),
+                    y: Math.min(dragStart.y, dragEnd.y),
+                    width: width,
+                    height: height
+                };
+
+                onAnnotationClick(rectData);
+                setIsDragging(false);
+                setDragStart(null);
+                setDragEnd(null);
+            };
+
+            // Calculate preview rect dimensions
+            const previewRect = isDragging && dragStart && dragEnd ? {
+                x: Math.min(dragStart.x, dragEnd.x),
+                y: Math.min(dragStart.y, dragEnd.y),
+                width: Math.abs(dragEnd.x - dragStart.x),
+                height: Math.abs(dragEnd.y - dragStart.y)
+            } : null;
+
             return (
                 <div className="pdf-page-wrapper">
                     <div ref={containerRef} style={{ position: 'relative', width: '100%', display: 'inline-block' }}>
                         <canvas ref={canvasRef} className="pdf-canvas"></canvas>
                         <svg
+                            ref={svgRef}
+                            onMouseDown={handleSvgMouseDown}
+                            onMouseMove={handleSvgMouseMove}
+                            onMouseUp={handleSvgMouseUp}
+                            onMouseLeave={() => isDragging && setIsDragging(false)}
                             style={{
                                 position: 'absolute',
                                 top: 0,
                                 left: 0,
-                                width: '100%',
-                                height: pageHeight || 'auto',
-                                cursor: 'pointer'
+                                width: pageWidth,
+                                height: pageHeight,
+                                cursor: isDragging ? 'crosshair' : 'pointer'
                             }}
                         >
+                            {/* Existing annotations */}
                             {annotations.map(anno => (
                                 <rect
                                     key={anno.id}
@@ -491,10 +560,23 @@
                                     fill="rgba(59, 130, 246, 0.1)"
                                     stroke="rgba(59, 130, 246, 0.5)"
                                     strokeWidth="2"
-                                    onClick={() => {}}
                                     style={{ cursor: 'pointer' }}
                                 />
                             ))}
+
+                            {/* Preview rect while dragging */}
+                            {previewRect && (
+                                <rect
+                                    x={previewRect.x}
+                                    y={previewRect.y}
+                                    width={previewRect.width}
+                                    height={previewRect.height}
+                                    fill="rgba(234, 179, 8, 0.2)"
+                                    stroke="rgba(234, 179, 8, 1)"
+                                    strokeWidth="2"
+                                    strokeDasharray="5,5"
+                                />
+                            )}
                         </svg>
                     </div>
                 </div>
