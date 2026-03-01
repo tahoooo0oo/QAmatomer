@@ -121,29 +121,36 @@
         // LaTeX記号と数学フォント、改行を削除してテキストを正規化
         const sanitizeQuote = (text) => {
             // 複数行の改行を1つのスペースに統一
-            let result = text.replace(/\s+/g, ' ').trim();
+            let result = text.replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\r/g, ' ');
 
             // LaTeX記号を削除
-            result = result.replace(/\\\([^\)]*\\\)/g, '').replace(/\$[^\$]*\$/g, '');
+            result = result.replace(/\\\([^\)]*\\\)/g, ' ').replace(/\$[^\$]*\$/g, ' ');
 
-            // 数学記号を統一（数学フォント版を削除）
-            // 例：𝑟 → r, ′ → ', etc.
-            result = result.replace(/[𝑎𝑏𝑐𝑑𝑒𝑓𝑔ℎ𝑖𝑗𝑘𝑙𝑚𝑛𝑜𝑝𝑞𝑟𝑠𝑡𝑢𝑣𝑤𝑥𝑦𝑧]/g, (m) => {
-                const mapping = {
-                    '𝑎': 'a', '𝑏': 'b', '𝑐': 'c', '𝑑': 'd', '𝑒': 'e', '𝑓': 'f', '𝑔': 'g',
-                    'ℎ': 'h', '𝑖': 'i', '𝑗': 'j', '𝑘': 'k', '𝑙': 'l', '𝑚': 'm', '𝑛': 'n',
-                    '𝑜': 'o', '𝑝': 'p', '𝑞': 'q', '𝑟': 'r', '𝑠': 's', '𝑡': 't', '𝑢': 'u',
-                    '𝑣': 'v', '𝑤': 'w', '𝑥': 'x', '𝑦': 'y', '𝑧': 'z'
-                };
-                return mapping[m] || m;
+            // 数学フォント（Math Alphanumeric Symbols: U+1D400～U+1D7FF）を削除
+            result = result.replace(/[\u1D400-\u1D7FF]/g, (m) => {
+                // 簡易マッピング（主要な小文字）
+                const code = m.charCodeAt(0);
+                // 𝑎=U+1D41A から 𝑧=U+1D433
+                if (code >= 0x1D41A && code <= 0x1D433) {
+                    return String.fromCharCode(0x61 + (code - 0x1D41A)); // a-z
+                }
+                return ' '; // それ以外は削除
             });
 
-            // 数学記号を正規フォントに統一
-            result = result.replace(/[′]/g, "'");  // プライム記号
-            result = result.replace(/[−]/g, "-");  // マイナス記号
+            // Greek letters と数学記号を削除
+            result = result.replace(/[\u0370-\u03FF\u1D6A4-\u1D7FF]/g, ' ');
 
-            // 前後の空白をもう一度削除
-            return result.trim();
+            // 特殊な数学記号を正規形に
+            result = result.replace(/[′]/g, "'");   // プライム
+            result = result.replace(/[−]/g, "-");   // マイナス
+            result = result.replace(/[·]/g, "*");   // 中点
+            result = result.replace(/[×]/g, "*");   // かけ算記号
+            result = result.replace(/[÷]/g, "/");   // わり算記号
+
+            // 複数の空白を1つに
+            result = result.replace(/\s+/g, ' ').trim();
+
+            return result;
         };
 
         // --- LocalStorage ヘルパー ---
