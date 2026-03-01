@@ -1048,11 +1048,11 @@
                 for (let i = 0; i <= paneIndex; i++) {
                     const pane = panes[i];
                     if (pane.type === 'main') {
-                        path.push({ type: 'main', title: 'メインテキスト', icon: 'ph-book-open' });
+                        path.push({ type: 'main', title: 'メインテキスト', icon: 'ph-book-open', quote: null });
                     } else if (pane.type === 'view') {
                         const anno = annotations.find(a => a.id === pane.annotationId);
                         if (anno) {
-                            path.push({ type: 'annotation', title: anno.title, icon: 'ph-chat-teardrop-text', id: anno.id });
+                            path.push({ type: 'annotation', title: anno.title, icon: 'ph-chat-teardrop-text', id: anno.id, quote: anno.quote });
                         }
                     }
                 }
@@ -1066,13 +1066,15 @@
                         <div key={idx} className="flex items-center gap-1">
                             {idx > 0 && <span className="text-gray-300 text-sm">›</span>}
                             <div className="group relative">
-                                <div className="inline-flex items-center gap-1 text-gray-600 hover:text-blue-600 transition-colors">
+                                <div className="inline-flex items-center gap-1 text-gray-600 hover:text-blue-600 transition-colors cursor-help">
                                     <i className={`ph-fill ${item.icon} text-xs`}></i>
                                     <span className="max-w-[80px] truncate text-[11px] font-medium">{item.title}</span>
                                 </div>
-                                <div className="absolute bottom-full left-0 mb-1 px-2 py-1 bg-gray-800 text-white text-[10px] rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-20">
-                                    {item.title}
-                                </div>
+                                {item.quote && (
+                                    <div className="absolute top-full left-0 mt-1 px-3 py-2 bg-gray-800 text-white text-[11px] rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-20 max-w-xs break-words">
+                                        {item.quote}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     ))}
