@@ -524,6 +524,7 @@
         const AnnotationForm = ({ mode, quote, parentTitle, initialData, onSave, onCancel }) => {
             const [title, setTitle] = useState(initialData?.title || '');
             const [content, setContent] = useState(initialData?.content || '');
+            const [quoteText, setQuoteText] = useState(initialData?.quote || quote || '');
 
             return (
                 <div className="flex flex-col h-full animate-slide-in-right bg-slate-50">
@@ -538,13 +539,18 @@
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
-                        <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
-                            <p className="text-xs text-slate-400 font-bold mb-2 flex items-center gap-1 uppercase tracking-wider">
-                                <i className="ph-bold ph-quotes"></i> 対象テキスト (From: {parentTitle})
+                        <div className="bg-white border border-orange-300 p-4 rounded-xl shadow-sm">
+                            <p className="text-xs text-orange-600 font-bold mb-2 flex items-center gap-1 uppercase tracking-wider">
+                                <i className="ph-bold ph-warning"></i> 引用テキスト (修正可能)
                             </p>
-                            <p className="text-gray-700 italic line-clamp-4 leading-relaxed text-sm bg-yellow-50 p-3 rounded border-l-2 border-yellow-400">
-                                {quote}
-                            </p>
+                            <textarea
+                                value={quoteText}
+                                onChange={(e) => setQuoteText(e.target.value)}
+                                className="w-full text-sm bg-orange-50 p-3 rounded border-l-2 border-orange-400 font-mono resize-none focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
+                                placeholder="自動抽出されたテキスト（修正可能）"
+                                rows="4"
+                            ></textarea>
+                            <p className="text-xs text-orange-500 mt-2">💡 自動抽出が失敗した場合、ここで正しいテキストを入力してください</p>
                         </div>
 
                         <div>
@@ -576,8 +582,8 @@
                             キャンセル
                         </button>
                         <button
-                            onClick={() => onSave(title, content)}
-                            disabled={!title.trim() || !content.trim()}
+                            onClick={() => onSave(title, content, quoteText)}
+                            disabled={!title.trim() || !content.trim() || !quoteText.trim()}
                             className="px-6 py-2.5 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-sm"
                         >
                             <i className="ph-bold ph-check"></i> 保存
@@ -945,8 +951,8 @@
                 window.getSelection().removeAllRanges();
             };
 
-            const updateAnnotation = (paneIndex, annotationId, title, content) => {
-                setAnnotations(prev => prev.map(a => a.id === annotationId ? { ...a, title, content, timestamp: Date.now() } : a));
+            const updateAnnotation = (paneIndex, annotationId, title, content, quoteText) => {
+                setAnnotations(prev => prev.map(a => a.id === annotationId ? { ...a, title, content, quote: quoteText || a.quote, timestamp: Date.now() } : a));
                 setPanes(prev => {
                     const newPanes = [...prev];
                     newPanes[paneIndex] = { ...newPanes[paneIndex], type: 'view' };
@@ -1086,9 +1092,9 @@
                                     quote={quote}
                                     parentTitle={parentTitle}
                                     initialData={initialData}
-                                    onSave={(title, content) => isAdd
-                                        ? saveNewAnnotation(index, pane.targetId, quote, title, content)
-                                        : updateAnnotation(index, pane.annotationId, title, content)
+                                    onSave={(title, content, quoteText) => isAdd
+                                        ? saveNewAnnotation(index, pane.targetId, quoteText || quote, title, content)
+                                        : updateAnnotation(index, pane.annotationId, title, content, quoteText)
                                     }
                                     onCancel={() => {
                                         if (isAdd) closePane(index);
