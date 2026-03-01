@@ -111,30 +111,19 @@
 
         /* Annotation anchor (footnote-style) */
         .annotation-anchor {
-            background-color: #fbbf24;
-            color: #78350f;
+            color: #f59e0b;
             font-weight: 700;
-            font-size: 0.85em;
-            vertical-align: baseline;
+            font-size: 1.1em;
             cursor: pointer;
-            padding: 2px 6px;
-            border-radius: 4px;
-            border: 1.5px solid #f59e0b;
             transition: all 0.15s;
             position: relative;
-            display: inline-block;
-            margin: 0 2px;
         }
         .annotation-anchor:hover {
-            background-color: #f59e0b;
-            color: #451a03;
-            box-shadow: 0 2px 6px rgba(245, 158, 11, 0.4);
-            transform: scale(1.1);
+            color: #d97706;
+            text-decoration: underline;
         }
         .annotation-anchor.active {
-            background-color: #f59e0b;
-            color: #451a03;
-            box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3);
+            color: #d97706;
             font-weight: 800;
         }
     </style>
@@ -208,7 +197,23 @@
             let result = markdown;
             sorted.forEach((anno, idx) => {
                 const anchorNum = sorted.length - idx; // 後ろから挿入するので逆順
-                const pos = anno.position.endOffset;
+                let pos = anno.position.endOffset;
+
+                // endOffset から次のスペースまたは改行を探す
+                if (pos !== undefined && pos >= 0) {
+                    const remaining = result.slice(pos);
+                    const spaceMatch = remaining.match(/\s/); // 最初のスペース/改行を探す
+                    if (spaceMatch) {
+                        pos = pos + spaceMatch.index;
+                    } else if (pos < result.length) {
+                        // スペースが見つからなければ、最後の単語の後まで移動
+                        const wordMatch = remaining.match(/\S+/);
+                        if (wordMatch) {
+                            pos = pos + wordMatch.index + wordMatch[0].length;
+                        }
+                    }
+                }
+
                 if (pos !== undefined && pos >= 0 && pos <= result.length) {
                     const anchor = `<span class="annotation-anchor" data-anno-id="${anno.id}" title="${anno.title || '注釈'}" data-anno-num="${anchorNum}">[${anchorNum}]</span>`;
                     result = result.slice(0, pos) + anchor + result.slice(pos);
