@@ -178,9 +178,25 @@
         const injectAnnotationAnchors = (markdown, annotations) => {
             if (!annotations || annotations.length === 0) return markdown;
 
+            // 注釈に position がない場合は quote から position を計算
+            const enrichedAnnos = annotations.map(anno => {
+                if (anno.position && anno.position.startOffset !== undefined) {
+                    return anno;
+                }
+
+                // quote から position を計算
+                if (anno.quote) {
+                    const pos = findSimpleTextPosition(markdown, anno.quote);
+                    if (pos) {
+                        return { ...anno, position: pos };
+                    }
+                }
+
+                return null;
+            }).filter(a => a && a.position && a.position.startOffset !== undefined);
+
             // 位置でソート（後ろから挿入するため逆順）
-            const sorted = [...annotations]
-                .filter(a => a.position && a.position.startOffset !== undefined)
+            const sorted = [...enrichedAnnos]
                 .sort((a, b) => (b.position.startOffset || 0) - (a.position.startOffset || 0));
 
             let result = markdown;
