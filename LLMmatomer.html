@@ -332,14 +332,36 @@
                                 return;
                             }
 
-                            console.log('[Mark.js Debug] Searching for:', quoteText, 'using', anno.position ? 'position' : 'quote', 'ID:', anno.id);
+                            console.log('[Mark.js] Searching for:', quoteText.slice(0, 50), '... ID:', anno.id);
 
                             const activeClass = activeAnnotationId === anno.id ? 'active' : '';
 
-                            // 複数行のテキストに対応：改行をスペースに統一して検索
-                            const searchText = quoteText.replace(/\n+/g, ' ');
+                            // 複数のパターンで検索を試みる
+                            const searchPatterns = [
+                                quoteText,  // そのまま
+                                quoteText.replace(/\n+/g, ' '),  // 改行をスペースに
+                                quoteText.replace(/\s+/g, ' '),  // 複数空白を1つに
+                            ];
 
-                            markerRef.current.mark(searchText, {
+                            let matched = false;
+                            const tryNextPattern = (patternIdx) => {
+                                if (matched || patternIdx >= searchPatterns.length) {
+                                    if (!matched) {
+                                        console.log('[Mark.js] ✗ No match found for any pattern');
+                                    }
+                                    markNext(index + 1);
+                                    return;
+                                }
+
+                                const searchText = searchPatterns[patternIdx];
+                                if (!searchText || searchText.length === 0) {
+                                    tryNextPattern(patternIdx + 1);
+                                    return;
+                                }
+
+                                console.log('[Mark.js] Attempt', patternIdx + 1, ':', searchText.slice(0, 50));
+
+                                markerRef.current.mark(searchText, {
                                 className: `annotation-mark ${activeClass}`,
                                 acrossElements: true,
                                 separateWordSearch: false,
@@ -391,10 +413,18 @@
                                     };
                                 },
                                 done: (count) => {
-                                    console.log('[Mark.js Debug] Matched:', count, 'occurrences for:', anno.quote);
-                                    if (!isCancelled) markNext(index + 1);
+                                    if (count > 0) {
+                                        matched = true;
+                                        console.log('[Mark.js] ✓ Matched:', count, 'with pattern', patternIdx + 1);
+                                        markNext(index + 1);
+                                    } else {
+                                        tryNextPattern(patternIdx + 1);
+                                    }
                                 }
-                            });
+                                });
+                            };
+
+                            tryNextPattern(0);
                         };
 
                         markNext(0);
