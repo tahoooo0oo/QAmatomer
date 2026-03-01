@@ -108,51 +108,6 @@
             border-bottom: 2px solid #ca8a04;
             box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.3);
         }
-
-        /* Annotation anchor (footnote-style) */
-        .annotation-anchor {
-            color: #f59e0b;
-            font-weight: 700;
-            font-size: 1.1em;
-            cursor: pointer;
-            transition: all 0.15s;
-            position: relative;
-        }
-        .annotation-anchor:hover {
-            color: #d97706;
-            text-decoration: underline;
-        }
-        .annotation-anchor.active {
-            color: #d97706;
-            font-weight: 800;
-        }
-
-        /* Annotation anchor in margin */
-        .annotation-anchor-margin {
-            background-color: transparent;
-            border: none;
-            color: #f59e0b;
-            font-weight: 700;
-            font-size: 0.7em;
-            cursor: pointer;
-            transition: all 0.15s;
-            padding: 0;
-            width: 100%;
-            text-align: center;
-            line-height: 1;
-            height: auto;
-            margin: 0;
-        }
-        .annotation-anchor-margin:hover {
-            color: #d97706;
-            text-decoration: underline;
-            font-size: 0.8em;
-        }
-        .annotation-anchor-margin.active {
-            color: #d97706;
-            font-weight: 800;
-            font-size: 0.8em;
-        }
     </style>
 </head>
 <body>
@@ -162,94 +117,6 @@
         const { useState, useEffect, useRef } = React;
 
         const generateId = () => Math.random().toString(36).substr(2, 9);
-
-        // Markdown offset ベースの注釈システム
-        // 注釈は startOffset, endOffset を持つ position オブジェクトで位置を特定
-
-        // マークダウン内でテキストを検索（簡易版）
-        const findSimpleTextPosition = (markdown, searchText) => {
-            if (!searchText || !markdown) return null;
-
-            // 完全マッチを試みる
-            const idx = markdown.indexOf(searchText);
-            if (idx !== -1) {
-                return {
-                    startOffset: idx,
-                    endOffset: idx + searchText.length,
-                    quote: searchText
-                };
-            }
-
-            // 簡単な正規化（複数スペースを1つに）
-            const normalized = searchText.replace(/\s+/g, ' ').trim();
-            const normalizedMarkdown = markdown.replace(/\s+/g, ' ');
-
-            const nIdx = normalizedMarkdown.indexOf(normalized);
-            if (nIdx !== -1) {
-                return {
-                    startOffset: nIdx,
-                    endOffset: nIdx + normalized.length,
-                    quote: normalized
-                };
-            }
-
-            return null;
-        };
-
-        // マークダウンにアンカーを inject する
-        const injectAnnotationAnchors = (markdown, annotations) => {
-            if (!annotations || annotations.length === 0) return markdown;
-
-            // 注釈に position がない場合は quote から position を計算
-            const enrichedAnnos = annotations.map(anno => {
-                if (anno.position && anno.position.endOffset !== undefined) {
-                    return anno;
-                }
-
-                // quote から position を計算
-                if (anno.quote) {
-                    const pos = findSimpleTextPosition(markdown, anno.quote);
-                    if (pos) {
-                        return { ...anno, position: pos };
-                    }
-                }
-
-                return null;
-            }).filter(a => a && a.position && a.position.endOffset !== undefined);
-
-            // 位置でソート（後ろから挿入するため逆順）
-            const sorted = [...enrichedAnnos]
-                .sort((a, b) => (b.position.endOffset || 0) - (a.position.endOffset || 0));
-
-            let result = markdown;
-            sorted.forEach((anno, idx) => {
-                const anchorNum = sorted.length - idx; // 後ろから挿入するので逆順
-                let pos = anno.position.endOffset;
-
-                // endOffset から次の改行を探す
-                let insertPos = pos;
-                const remaining = result.slice(pos);
-                const newlineMatch = remaining.match(/\n/); // 最初の改行を探す
-                if (newlineMatch) {
-                    insertPos = pos + newlineMatch.index; // 改行の位置
-                }
-
-                if (insertPos !== undefined && insertPos >= 0 && insertPos <= result.length) {
-                    const anchor = `<span class="annotation-anchor" data-anno-id="${anno.id}" title="${anno.title || '注釈'}" data-anno-num="${anchorNum}">[${anchorNum}]</span>`;
-                    // 改行がある場合は改行を分割して、アンカーを挿入
-                    if (newlineMatch) {
-                        const before = result.slice(0, insertPos);
-                        const newline = result.slice(insertPos, insertPos + 1);
-                        const after = result.slice(insertPos + 1);
-                        result = before + anchor + newline + after;
-                    } else {
-                        result = result.slice(0, insertPos) + anchor + result.slice(insertPos);
-                    }
-                }
-            });
-
-            return result;
-        };
 
         // --- LocalStorage ヘルパー ---
         const Storage = {
@@ -275,10 +142,9 @@
         };
 
         // --- コンポーネント: Markdown & KaTeX & Highlight ビュワー ---
-        const MarkdownViewer = ({ content, className = "markdown-body", annotations = [], onMarkClick, onMultiMarkClick, onMarkHover, activeAnnotationId, onAnnotationClick }) => {
+        const MarkdownViewer = ({ content, className = "markdown-body", annotations = [], onMarkClick, onMultiMarkClick, onMarkHover, activeAnnotationId }) => {
             const contentRef = useRef(null);
             const markerRef = useRef(null);
-            const anchorsContainerRef = useRef(null);
 
             const callbacksRef = useRef({ onMarkClick, onMultiMarkClick, onMarkHover });
             useEffect(() => {
@@ -318,16 +184,10 @@
                         return id;
                     });
 
-                    // Note: アンカーはマージン領域に配置するため、ここでは inject しない
                     let html = marked.parse(processedText);
 
-                    // LaTeX を data-latex 属性で埋め込む
                     mathBlocks.forEach(block => {
-                        const encoded = block.content
-                            .replace(/&/g, '&amp;')
-                            .replace(/"/g, '&quot;');
-                        const wrapper = `<span data-latex="${encoded}" class="math-latex-wrap">${block.content}</span>`;
-                        html = html.replace(block.id, wrapper);
+                        html = html.replace(block.id, block.content);
                     });
 
                     contentRef.current.innerHTML = html;
@@ -346,180 +206,98 @@
                         console.error("KaTeX rendering error:", e);
                     }
 
-                    // クリップボードイベント：コピー時に LaTeX コードを含める
-                    contentRef.current.addEventListener('copy', (e) => {
-                        const selection = window.getSelection();
-                        if (selection.rangeCount === 0) return;
+                    markerRef.current = new Mark(contentRef.current);
+                }
+            }, [content]);
 
-                        const range = selection.getRangeAt(0);
-                        const tempDiv = document.createElement('div');
-                        tempDiv.appendChild(range.cloneContents());
+            useEffect(() => {
+                if (!markerRef.current) return;
 
-                        // 選択範囲内の data-latex を抽出
-                        const mathSpans = tempDiv.querySelectorAll('[data-latex]');
+                let isCancelled = false;
 
-                        if (mathSpans.length > 0) {
-                            const text = selection.toString();
-                            // LaTeX から区切り文字（\(...\) や $...$）を削除して、本体のみ抽出
-                            const latexBodies = Array.from(mathSpans)
-                                .map(span => {
-                                    let latex = span.dataset.latex;
-                                    // \(...\) や \[...\] や $...$ を削除
-                                    return latex
-                                        .replace(/\\\(/, '')
-                                        .replace(/\\\)/, '')
-                                        .replace(/\\\[/, '')
-                                        .replace(/\\\]/, '')
-                                        .replace(/^\$\$/, '')
-                                        .replace(/\$\$$/, '')
-                                        .replace(/^\$/, '')
-                                        .replace(/\$$/, '');
-                                })
-                                .join('');
+                markerRef.current.unmark({
+                    done: () => {
+                        if (isCancelled || !annotations || annotations.length === 0) return;
 
-                            // クリップボードにテキスト + LaTeX本体を設定
-                            e.preventDefault();
-                            e.clipboardData.setData('text/plain', text + ' ' + latexBodies);
-                            console.log('[Copy] Text:', text, 'LaTeX bodies:', latexBodies);
-                        }
-                    });
+                        const markNext = (index) => {
+                            if (isCancelled) return;
+                            if (index >= annotations.length) return;
+                            const anno = annotations[index];
 
-                    // 注釈アンカーのクリックハンドラーを設定
-                    const anchors = contentRef.current.querySelectorAll('.annotation-anchor');
-                    anchors.forEach(anchor => {
-                        anchor.addEventListener('click', (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const annoId = anchor.dataset.annoId;
-                            if (annoId && onAnnotationClick) {
-                                onAnnotationClick(annoId);
+                            if (!anno.quote) {
+                                markNext(index + 1);
+                                return;
                             }
-                        });
 
-                        // ホバーでタイトルを表示
-                        anchor.style.cursor = 'pointer';
-                    });
-                }
-            }, [content, annotations]);
+                            const activeClass = activeAnnotationId === anno.id ? 'active' : '';
 
-            // Annotation anchor のアクティブ状態を更新
-            useEffect(() => {
-                const anchors = contentRef.current?.querySelectorAll('.annotation-anchor');
-                if (anchors) {
-                    anchors.forEach(anchor => {
-                        const annoId = anchor.dataset.annoId;
-                        if (activeAnnotationId === annoId) {
-                            anchor.classList.add('active');
-                        } else {
-                            anchor.classList.remove('active');
-                        }
-                    });
-                }
+                            markerRef.current.mark(anno.quote, {
+                                className: `annotation-mark ${activeClass}`,
+                                acrossElements: true,
+                                separateWordSearch: false,
+                                diacritics: false,
+                                exclude: [".katex *", ".katex", "code", "pre"],
+                                each: (el) => {
+                                    el.dataset.annoId = anno.id;
+                                    el.onmouseenter = () => {
+                                        if (callbacksRef.current.onMarkHover) {
+                                            const rect = el.getBoundingClientRect();
+                                            const titles = [];
+                                            let n = el;
+                                            while (n) {
+                                                if (n.dataset && n.dataset.annoId) {
+                                                    const a = annotations.find(x => x.id === n.dataset.annoId);
+                                                    if (a && a.title && !titles.includes(a.title)) titles.push(a.title);
+                                                }
+                                                if (n === contentRef.current) break;
+                                                n = n.parentElement;
+                                            }
+                                            callbacksRef.current.onMarkHover(true, titles.length > 1 ? titles.join(' / ') : (anno.title || '注釈を表示'), rect);
+                                        }
+                                    };
+                                    el.onmouseleave = () => {
+                                        if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false);
+                                    };
 
-                // マージンのアンカーも同時に更新
-                const marginAnchors = anchorsContainerRef.current?.querySelectorAll('.annotation-anchor-margin');
-                if (marginAnchors) {
-                    marginAnchors.forEach(anchor => {
-                        const annoId = anchor.dataset.annoId;
-                        if (activeAnnotationId === annoId) {
-                            anchor.classList.add('active');
-                        } else {
-                            anchor.classList.remove('active');
-                        }
-                    });
-                }
-            }, [activeAnnotationId]);
-
-            // マージン内にアンカーを配置
-            useEffect(() => {
-                if (!contentRef.current || !anchorsContainerRef.current || annotations.length === 0) return;
-
-                // マージンをクリア
-                anchorsContainerRef.current.innerHTML = '';
-
-                // 各注釈の Y 位置を計算
-                const anchorPositions = []; // { annoId, y, idx }
-
-                annotations.forEach((anno, idx) => {
-                    if (!anno.quote) return;
-
-                    // contentRef 内でテキストを検索
-                    const treeWalker = document.createTreeWalker(
-                        contentRef.current,
-                        NodeFilter.SHOW_TEXT,
-                        null,
-                        false
-                    );
-
-                    let node;
-                    while (node = treeWalker.nextNode()) {
-                        if (node.textContent.includes(anno.quote)) {
-                            // quote を含むテキストノードを見つけた
-                            const range = document.createRange();
-                            range.selectNodeContents(node);
-                            const rect = range.getBoundingClientRect();
-                            const containerRect = contentRef.current.getBoundingClientRect();
-
-                            // テキストの下端を基準に位置を計算
-                            const relativeY = rect.bottom - containerRect.top;
-                            anchorPositions.push({
-                                annoId: anno.id,
-                                y: relativeY,
-                                idx: idx + 1
+                                    el.onclick = (e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        window.getSelection().removeAllRanges();
+                                        if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false);
+                                        const annoIds = [];
+                                        let node = e.target;
+                                        while (node) {
+                                            if (node.dataset && node.dataset.annoId) {
+                                                if (!annoIds.includes(node.dataset.annoId)) annoIds.push(node.dataset.annoId);
+                                            }
+                                            if (node === contentRef.current) break;
+                                            node = node.parentElement;
+                                        }
+                                        if (annoIds.length > 1 && callbacksRef.current.onMultiMarkClick) {
+                                            const rect = el.getBoundingClientRect();
+                                            callbacksRef.current.onMultiMarkClick(annoIds, rect);
+                                        } else {
+                                            if (callbacksRef.current.onMarkClick) callbacksRef.current.onMarkClick(annoIds[0] || anno.id);
+                                        }
+                                    };
+                                },
+                                done: () => {
+                                    if (!isCancelled) markNext(index + 1);
+                                }
                             });
-                            break;
-                        }
+                        };
+
+                        markNext(0);
                     }
                 });
 
-                // 同じ Y 位置のアンカーをグループ化
-                const positionMap = new Map();
-                anchorPositions.forEach(pos => {
-                    const key = Math.round(pos.y / 10) * 10; // 10px単位でグループ化
-                    if (!positionMap.has(key)) {
-                        positionMap.set(key, []);
-                    }
-                    positionMap.get(key).push(pos);
-                });
+                return () => {
+                    isCancelled = true;
+                    if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false);
+                };
+            }, [content, annotationsStr, activeAnnotationId]);
 
-                // マージンにアンカーを配置
-                positionMap.forEach((positions, baseY) => {
-                    positions.forEach((pos, offsetIdx) => {
-                        const marginAnchor = document.createElement('button');
-                        marginAnchor.className = 'annotation-anchor-margin';
-                        marginAnchor.textContent = `[${pos.idx}]`;
-                        marginAnchor.dataset.annoId = pos.annoId;
-                        marginAnchor.style.position = 'absolute';
-                        // 同じ行に複数ある場合は上下に詰めて配置（5px間隔）
-                        marginAnchor.style.top = `${baseY + offsetIdx * 5}px`;
-                        marginAnchor.style.cursor = 'pointer';
-                        marginAnchor.style.fontSize = '0.75em';
-
-                        marginAnchor.addEventListener('click', (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (onAnnotationClick) {
-                                onAnnotationClick(pos.annoId);
-                            }
-                        });
-
-                        anchorsContainerRef.current.appendChild(marginAnchor);
-                    });
-                });
-            }, [content, annotations]);
-
-            return (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 5%', gap: '1rem', width: '100%' }}>
-                    <div ref={contentRef} className={className}></div>
-                    <div
-                        ref={anchorsContainerRef}
-                        style={{
-                            position: 'relative',
-                            minHeight: '100%'
-                        }}
-                    ></div>
-                </div>
-            );
+            return <div ref={contentRef} className={className}></div>;
         };
 
         // --- コンポーネント: ホーム画面（プロジェクト一覧） ---
@@ -701,19 +479,16 @@
         };
 
         // --- コンポーネント: 注釈フォーム (追加・編集) ---
-        const AnnotationForm = ({ mode, lineNumber, parentTitle, initialData, onSave, onCancel }) => {
+        const AnnotationForm = ({ mode, quote, parentTitle, initialData, onSave, onCancel }) => {
             const [title, setTitle] = useState(initialData?.title || '');
             const [content, setContent] = useState(initialData?.content || '');
 
             return (
                 <div className="flex flex-col h-full animate-slide-in-right bg-slate-50">
                     <div className="p-4 border-b border-gray-200 bg-white flex items-center justify-between shrink-0 shadow-sm z-10">
-                        <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2">
-                                <i className={`ph-fill ${mode === 'add' ? 'ph-plus-circle text-blue-500' : 'ph-pencil-simple text-orange-500'} text-xl`}></i>
-                                <h3 className="font-bold text-gray-700">{mode === 'add' ? '新規注釈の追加' : '注釈の編集'}</h3>
-                            </div>
-                            {lineNumber !== undefined && <p className="text-xs text-gray-500 ml-8">行 #{lineNumber}</p>}
+                        <div className="flex items-center gap-2">
+                            <i className={`ph-fill ${mode === 'add' ? 'ph-plus-circle text-blue-500' : 'ph-pencil-simple text-orange-500'} text-xl`}></i>
+                            <h3 className="font-bold text-gray-700">{mode === 'add' ? '新規注釈の追加' : '注釈の編集'}</h3>
                         </div>
                         <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 transition-colors">
                             <i className="ph-bold ph-x text-lg"></i>
@@ -721,6 +496,15 @@
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+                        <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
+                            <p className="text-xs text-slate-400 font-bold mb-2 flex items-center gap-1 uppercase tracking-wider">
+                                <i className="ph-bold ph-quotes"></i> 対象テキスト (From: {parentTitle})
+                            </p>
+                            <p className="text-gray-700 italic line-clamp-4 leading-relaxed text-sm bg-yellow-50 p-3 rounded border-l-2 border-yellow-400">
+                                {quote}
+                            </p>
+                        </div>
+
                         <div>
                             <label className="block text-sm font-bold text-gray-600 mb-2">タイトル / 要約</label>
                             <input
@@ -1025,48 +809,7 @@
                     const selection = window.getSelection();
                     const text = selection.toString().trim();
 
-                    console.log('[handleMouseUp] targetId:', targetId, 'mainText length:', mainText.length);
-
                     if (text.length >= 2 && selection.rangeCount > 0) {
-                        // 選択範囲内の LaTeX を抽出
-                        let enhancedText = text;
-                        if (selection.rangeCount > 0) {
-                            const range = selection.getRangeAt(0);
-                            const tempDiv = document.createElement('div');
-                            tempDiv.appendChild(range.cloneContents());
-                            const mathSpans = tempDiv.querySelectorAll('[data-latex]');
-
-                            if (mathSpans.length > 0) {
-                                const mathLaTeXes = Array.from(mathSpans)
-                                    .map(span => span.dataset.latex)
-                                    .join(' ');
-                                console.log('[Selection] Found LaTeX:', mathLaTeXes);
-                                enhancedText = text + ' ' + mathLaTeXes;
-                            }
-                        }
-
-                        // マークダウンテキストを取得
-                        let markdownText = '';
-                        if (targetId === 'main') {
-                            markdownText = mainText;
-                        } else {
-                            // targetId が main でない場合は、すでに存在する注釈のコンテンツを使用
-                            const anno = annotations.find(a => a.id === targetId);
-                            if (anno?.content) {
-                                markdownText = anno.content;
-                            } else {
-                                console.warn('[handleMouseUp] Cannot find annotation content for targetId:', targetId);
-                                return;
-                            }
-                        }
-
-                        // マークダウン内の位置を計算
-                        const position = findSimpleTextPosition(markdownText, text);
-
-                        console.log('[Selection] Text:', text);
-                        console.log('[Selection] Enhanced text:', enhancedText);
-                        console.log('[Selection] Position found:', position);
-
                         const range = selection.getRangeAt(0);
                         const rect = range.getBoundingClientRect();
 
@@ -1075,7 +818,6 @@
                             top: Math.max(10, rect.top - 45),
                             left: rect.left + (rect.width / 2),
                             text: text,
-                            position: position,  // マークダウン位置情報を追加
                             paneIndex: paneIndex,
                             targetId: targetId
                         });
@@ -1125,28 +867,21 @@
                 });
             };
 
-            const startAddAnnotation = (paneIndex, targetId, quote, position) => {
+            const startAddAnnotation = (paneIndex, targetId, quote) => {
                 setPanes(prev => {
                     const newPanes = prev.slice(0, paneIndex + 1);
                     newPanes.push({
                         id: generateId(),
                         type: 'add',
                         targetId: targetId,
-                        quote: quote || '',
-                        position: position  // マークダウン位置情報を保存
+                        quote: quote
                     });
                     return newPanes;
                 });
             };
 
-            const saveNewAnnotation = (paneIndex, lineNumber, title, content) => {
-                const newAnno = {
-                    id: generateId(),
-                    lineNumber,
-                    title,
-                    content,
-                    timestamp: Date.now()
-                };
+            const saveNewAnnotation = (paneIndex, targetId, quote, title, content) => {
+                const newAnno = { id: generateId(), targetId, quote, title, content, timestamp: Date.now() };
                 setAnnotations(prev => [...prev, newAnno]);
 
                 setPanes(prev => {
@@ -1154,10 +889,12 @@
                     newPanes[paneIndex] = {
                         id: generateId(),
                         type: 'view',
+                        targetId: targetId,
                         annotationId: newAnno.id
                     };
                     return newPanes;
                 });
+                window.getSelection().removeAllRanges();
             };
 
             const updateAnnotation = (paneIndex, annotationId, title, content) => {
@@ -1228,7 +965,6 @@
                                             onMarkClick={(id) => openAnnotation(index, id)}
                                             onMultiMarkClick={(ids, rect) => handleMultiMarkClick(index, ids, rect)}
                                             onMarkHover={handleMarkHover}
-                                            onAnnotationClick={(annoId) => openAnnotation(index, annoId)}
                                             activeAnnotationId={activeAnnoId}
                                         />
                                     </div>
@@ -1278,7 +1014,6 @@
                                             onMarkClick={(id) => openAnnotation(index, id)}
                                             onMultiMarkClick={(ids, rect) => handleMultiMarkClick(index, ids, rect)}
                                             onMarkHover={handleMarkHover}
-                                            onAnnotationClick={(annoId) => openAnnotation(index, annoId)}
                                             activeAnnotationId={activeAnnoId}
                                         />
                                     </div>
@@ -1294,17 +1029,17 @@
                             : annotations.find(a => a.id === pane.targetId)?.title;
 
                         const initialData = isAdd ? null : annotations.find(a => a.id === pane.annotationId);
-                        const lineNumber = isAdd ? pane.lineNumber : initialData?.lineNumber;
+                        const quote = isAdd ? pane.quote : initialData?.quote;
 
                         return (
                             <div key={pane.id} className="w-[90vw] md:w-[50vw] lg:w-[45vw] shrink-0 h-full bg-slate-50 border-r border-gray-200 flex flex-col relative shadow-[4px_0_24px_rgba(0,0,0,0.06)] z-0">
                                 <AnnotationForm
                                     mode={pane.type}
-                                    lineNumber={lineNumber}
+                                    quote={quote}
                                     parentTitle={parentTitle}
                                     initialData={initialData}
                                     onSave={(title, content) => isAdd
-                                        ? saveNewAnnotation(index, lineNumber, title, content)
+                                        ? saveNewAnnotation(index, pane.targetId, quote, title, content)
                                         : updateAnnotation(index, pane.annotationId, title, content)
                                     }
                                     onCancel={() => {
@@ -1435,7 +1170,7 @@
                                         className="text-sm font-bold text-blue-300 hover:text-blue-100 flex items-center gap-1.5 whitespace-nowrap"
                                         onMouseDown={(e) => {
                                             e.preventDefault();
-                                            startAddAnnotation(selectionMenu.paneIndex, selectionMenu.targetId, selectionMenu.text, selectionMenu.position);
+                                            startAddAnnotation(selectionMenu.paneIndex, selectionMenu.targetId, selectionMenu.text);
                                             setSelectionMenu({ show: false });
                                             window.getSelection().removeAllRanges();
                                         }}
