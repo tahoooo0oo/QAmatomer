@@ -200,18 +200,24 @@
                 let pos = anno.position.endOffset;
 
                 // endOffset から次の改行を探す
-                if (pos !== undefined && pos >= 0) {
-                    const remaining = result.slice(pos);
-                    const newlineMatch = remaining.match(/\n/); // 最初の改行を探す
-                    if (newlineMatch) {
-                        pos = pos + newlineMatch.index; // 改行の直前に挿入
-                    }
-                    // 改行がなければ endOffset のままで挿入
+                let insertPos = pos;
+                const remaining = result.slice(pos);
+                const newlineMatch = remaining.match(/\n/); // 最初の改行を探す
+                if (newlineMatch) {
+                    insertPos = pos + newlineMatch.index; // 改行の位置
                 }
 
-                if (pos !== undefined && pos >= 0 && pos <= result.length) {
+                if (insertPos !== undefined && insertPos >= 0 && insertPos <= result.length) {
                     const anchor = `<span class="annotation-anchor" data-anno-id="${anno.id}" title="${anno.title || '注釈'}" data-anno-num="${anchorNum}">[${anchorNum}]</span>`;
-                    result = result.slice(0, pos) + anchor + result.slice(pos);
+                    // 改行がある場合は改行を分割して、アンカーを挿入
+                    if (newlineMatch) {
+                        const before = result.slice(0, insertPos);
+                        const newline = result.slice(insertPos, insertPos + 1);
+                        const after = result.slice(insertPos + 1);
+                        result = before + anchor + newline + after;
+                    } else {
+                        result = result.slice(0, insertPos) + anchor + result.slice(insertPos);
+                    }
                 }
             });
 
