@@ -701,17 +701,19 @@
         };
 
         // --- コンポーネント: 注釈フォーム (追加・編集) ---
-        const AnnotationForm = ({ mode, quote, parentTitle, initialData, onSave, onCancel }) => {
+        const AnnotationForm = ({ mode, lineNumber, parentTitle, initialData, onSave, onCancel }) => {
             const [title, setTitle] = useState(initialData?.title || '');
             const [content, setContent] = useState(initialData?.content || '');
-            const [quoteText, setQuoteText] = useState(initialData?.quote || quote || '');
 
             return (
                 <div className="flex flex-col h-full animate-slide-in-right bg-slate-50">
                     <div className="p-4 border-b border-gray-200 bg-white flex items-center justify-between shrink-0 shadow-sm z-10">
-                        <div className="flex items-center gap-2">
-                            <i className={`ph-fill ${mode === 'add' ? 'ph-plus-circle text-blue-500' : 'ph-pencil-simple text-orange-500'} text-xl`}></i>
-                            <h3 className="font-bold text-gray-700">{mode === 'add' ? '新規注釈の追加' : '注釈の編集'}</h3>
+                        <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                                <i className={`ph-fill ${mode === 'add' ? 'ph-plus-circle text-blue-500' : 'ph-pencil-simple text-orange-500'} text-xl`}></i>
+                                <h3 className="font-bold text-gray-700">{mode === 'add' ? '新規注釈の追加' : '注釈の編集'}</h3>
+                            </div>
+                            {lineNumber !== undefined && <p className="text-xs text-gray-500 ml-8">行 #{lineNumber}</p>}
                         </div>
                         <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 transition-colors">
                             <i className="ph-bold ph-x text-lg"></i>
@@ -719,20 +721,6 @@
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
-                        <div className="bg-white border border-orange-300 p-4 rounded-xl shadow-sm">
-                            <p className="text-xs text-orange-600 font-bold mb-2 flex items-center gap-1 uppercase tracking-wider">
-                                <i className="ph-bold ph-warning"></i> 引用テキスト (修正可能)
-                            </p>
-                            <textarea
-                                value={quoteText}
-                                onChange={(e) => setQuoteText(e.target.value)}
-                                className="w-full text-sm bg-orange-50 p-3 rounded border-l-2 border-orange-400 font-mono resize-none focus:ring-2 focus:ring-orange-500 focus:border-transparent outline-none"
-                                placeholder="自動抽出されたテキスト（修正可能）"
-                                rows="4"
-                            ></textarea>
-                            <p className="text-xs text-orange-500 mt-2">💡 自動抽出が失敗した場合、ここで正しいテキストを入力してください</p>
-                        </div>
-
                         <div>
                             <label className="block text-sm font-bold text-gray-600 mb-2">タイトル / 要約</label>
                             <input
@@ -762,8 +750,8 @@
                             キャンセル
                         </button>
                         <button
-                            onClick={() => onSave(title, content, quoteText)}
-                            disabled={!title.trim() || !content.trim() || !quoteText.trim()}
+                            onClick={() => onSave(title, content)}
+                            disabled={!title.trim() || !content.trim()}
                             className="px-6 py-2.5 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-sm"
                         >
                             <i className="ph-bold ph-check"></i> 保存
@@ -1151,12 +1139,10 @@
                 });
             };
 
-            const saveNewAnnotation = (paneIndex, targetId, quote, title, content, position) => {
+            const saveNewAnnotation = (paneIndex, lineNumber, title, content) => {
                 const newAnno = {
                     id: generateId(),
-                    targetId,
-                    quote: quote || '',
-                    position: position,  // マークダウン位置情報を保存
+                    lineNumber,
                     title,
                     content,
                     timestamp: Date.now()
@@ -1168,16 +1154,14 @@
                     newPanes[paneIndex] = {
                         id: generateId(),
                         type: 'view',
-                        targetId: targetId,
                         annotationId: newAnno.id
                     };
                     return newPanes;
                 });
-                window.getSelection().removeAllRanges();
             };
 
-            const updateAnnotation = (paneIndex, annotationId, title, content, quoteText, position) => {
-                setAnnotations(prev => prev.map(a => a.id === annotationId ? { ...a, title, content, quote: quoteText || a.quote, position: position || a.position, timestamp: Date.now() } : a));
+            const updateAnnotation = (paneIndex, annotationId, title, content) => {
+                setAnnotations(prev => prev.map(a => a.id === annotationId ? { ...a, title, content, timestamp: Date.now() } : a));
                 setPanes(prev => {
                     const newPanes = [...prev];
                     newPanes[paneIndex] = { ...newPanes[paneIndex], type: 'view' };
@@ -1310,18 +1294,18 @@
                             : annotations.find(a => a.id === pane.targetId)?.title;
 
                         const initialData = isAdd ? null : annotations.find(a => a.id === pane.annotationId);
-                        const quote = isAdd ? pane.quote : initialData?.quote;
+                        const lineNumber = isAdd ? pane.lineNumber : initialData?.lineNumber;
 
                         return (
                             <div key={pane.id} className="w-[90vw] md:w-[50vw] lg:w-[45vw] shrink-0 h-full bg-slate-50 border-r border-gray-200 flex flex-col relative shadow-[4px_0_24px_rgba(0,0,0,0.06)] z-0">
                                 <AnnotationForm
                                     mode={pane.type}
-                                    quote={quote}
+                                    lineNumber={lineNumber}
                                     parentTitle={parentTitle}
                                     initialData={initialData}
-                                    onSave={(title, content, quoteText) => isAdd
-                                        ? saveNewAnnotation(index, pane.targetId, quoteText || quote, title, content, pane.position)
-                                        : updateAnnotation(index, pane.annotationId, title, content, quoteText, pane.position)
+                                    onSave={(title, content) => isAdd
+                                        ? saveNewAnnotation(index, lineNumber, title, content)
+                                        : updateAnnotation(index, pane.annotationId, title, content)
                                     }
                                     onCancel={() => {
                                         if (isAdd) closePane(index);
