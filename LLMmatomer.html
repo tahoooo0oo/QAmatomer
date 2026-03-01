@@ -142,14 +142,14 @@
         };
 
         // --- コンポーネント: Markdown & KaTeX & Highlight ビュワー ---
-        const MarkdownViewer = ({ content, className = "markdown-body", annotations = [], onMarkClick, onMarkHover, activeAnnotationId }) => {
+        const MarkdownViewer = ({ content, className = "markdown-body", annotations = [], onMarkClick, onMultiMarkClick, onMarkHover, activeAnnotationId }) => {
             const contentRef = useRef(null);
             const markerRef = useRef(null);
 
-            const callbacksRef = useRef({ onMarkClick, onMarkHover });
+            const callbacksRef = useRef({ onMarkClick, onMultiMarkClick, onMarkHover });
             useEffect(() => {
-                callbacksRef.current = { onMarkClick, onMarkHover };
-            }, [onMarkClick, onMarkHover]);
+                callbacksRef.current = { onMarkClick, onMultiMarkClick, onMarkHover };
+            }, [onMarkClick, onMultiMarkClick, onMarkHover]);
 
             const annotationsStr = JSON.stringify(
                 annotations.map(a => ({ id: a.id, quote: a.quote, title: a.title }))
@@ -238,10 +238,21 @@
                                 diacritics: false,
                                 exclude: [".katex *", ".katex", "code", "pre"],
                                 each: (el) => {
+                                    el.dataset.annoId = anno.id;
                                     el.onmouseenter = () => {
                                         if (callbacksRef.current.onMarkHover) {
                                             const rect = el.getBoundingClientRect();
-                                            callbacksRef.current.onMarkHover(true, anno.title || '注釈を表示', rect);
+                                            const titles = [];
+                                            let n = el;
+                                            while (n) {
+                                                if (n.dataset && n.dataset.annoId) {
+                                                    const a = annotations.find(x => x.id === n.dataset.annoId);
+                                                    if (a && a.title && !titles.includes(a.title)) titles.push(a.title);
+                                                }
+                                                if (n === contentRef.current) break;
+                                                n = n.parentElement;
+                                            }
+                                            callbacksRef.current.onMarkHover(true, titles.length > 1 ? titles.join(' / ') : (anno.title || '注釈を表示'), rect);
                                         }
                                     };
                                     el.onmouseleave = () => {
@@ -253,7 +264,21 @@
                                         e.stopPropagation();
                                         window.getSelection().removeAllRanges();
                                         if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false);
-                                        if (callbacksRef.current.onMarkClick) callbacksRef.current.onMarkClick(anno.id);
+                                        const annoIds = [];
+                                        let node = e.target;
+                                        while (node) {
+                                            if (node.dataset && node.dataset.annoId) {
+                                                if (!annoIds.includes(node.dataset.annoId)) annoIds.push(node.dataset.annoId);
+                                            }
+                                            if (node === contentRef.current) break;
+                                            node = node.parentElement;
+                                        }
+                                        if (annoIds.length > 1 && callbacksRef.current.onMultiMarkClick) {
+                                            const rect = el.getBoundingClientRect();
+                                            callbacksRef.current.onMultiMarkClick(annoIds, rect);
+                                        } else {
+                                            if (callbacksRef.current.onMarkClick) callbacksRef.current.onMarkClick(annoIds[0] || anno.id);
+                                        }
                                     };
                                 },
                                 done: () => {
@@ -534,6 +559,7 @@
 
             const [selectionMenu, setSelectionMenu] = useState({ show: false, top: 0, left: 0, text: '', paneIndex: 0, targetId: 'main' });
             const [tooltip, setTooltip] = useState({ show: false, text: '', top: 0, left: 0 });
+            const [annotationPicker, setAnnotationPicker] = useState({ show: false, annoIds: [], top: 0, left: 0, paneIndex: 0 });
 
             const scrollContainerRef = useRef(null);
 
@@ -804,6 +830,17 @@
             const handleScroll = () => {
                 if (selectionMenu.show) setSelectionMenu({ show: false });
                 if (tooltip.show) setTooltip({ show: false });
+                if (annotationPicker.show) setAnnotationPicker(p => ({ ...p, show: false }));
+            };
+
+            const handleMultiMarkClick = (paneIndex, annoIds, rect) => {
+                setAnnotationPicker({
+                    show: true,
+                    annoIds,
+                    top: rect.bottom + 8,
+                    left: rect.left + rect.width / 2,
+                    paneIndex
+                });
             };
 
             const handleMarkHover = (isHovering, text, rect) => {
@@ -926,6 +963,7 @@
                                             className="markdown-body left-pane-text"
                                             annotations={annotations.filter(a => a.targetId === 'main')}
                                             onMarkClick={(id) => openAnnotation(index, id)}
+                                            onMultiMarkClick={(ids, rect) => handleMultiMarkClick(index, ids, rect)}
                                             onMarkHover={handleMarkHover}
                                             activeAnnotationId={activeAnnoId}
                                         />
@@ -974,6 +1012,7 @@
                                             content={anno.content}
                                             annotations={annotations.filter(a => a.targetId === anno.id)}
                                             onMarkClick={(id) => openAnnotation(index, id)}
+                                            onMultiMarkClick={(ids, rect) => handleMultiMarkClick(index, ids, rect)}
                                             onMarkHover={handleMarkHover}
                                             activeAnnotationId={activeAnnoId}
                                         />
@@ -1149,6 +1188,39 @@
                                     {tooltip.text}
                                     <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-[5px] border-transparent border-t-slate-800"></div>
                                 </div>
+                            )}
+
+                            {annotationPicker.show && (
+                                <React.Fragment>
+                                    <div className="fixed inset-0 z-[115]" onClick={() => setAnnotationPicker(p => ({ ...p, show: false }))}></div>
+                                    <div
+                                        className="fixed z-[120] transform -translate-x-1/2 bg-white rounded-xl shadow-2xl border border-gray-200 animate-fade-in-up overflow-hidden min-w-[220px]"
+                                        style={{ top: `${annotationPicker.top}px`, left: `${annotationPicker.left}px` }}
+                                    >
+                                        <div className="px-4 py-2 bg-gray-50 border-b border-gray-100">
+                                            <p className="text-xs font-bold text-gray-500">複数の注釈があります</p>
+                                        </div>
+                                        <div className="py-1">
+                                            {annotationPicker.annoIds.map(id => {
+                                                const pickerAnno = annotations.find(a => a.id === id);
+                                                if (!pickerAnno) return null;
+                                                return (
+                                                    <button
+                                                        key={id}
+                                                        className="w-full text-left px-4 py-2.5 hover:bg-blue-50 flex items-center gap-2 transition-colors"
+                                                        onClick={() => {
+                                                            openAnnotation(annotationPicker.paneIndex, id);
+                                                            setAnnotationPicker(p => ({ ...p, show: false }));
+                                                        }}
+                                                    >
+                                                        <i className="ph-fill ph-chat-teardrop-text text-blue-500 shrink-0"></i>
+                                                        <span className="text-sm font-medium text-gray-700 truncate">{pickerAnno.title}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </React.Fragment>
                             )}
 
                             <div
