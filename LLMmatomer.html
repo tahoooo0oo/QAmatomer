@@ -204,7 +204,7 @@
                     const remaining = result.slice(pos);
                     const newlineMatch = remaining.match(/\n/); // 最初の改行を探す
                     if (newlineMatch) {
-                        pos = pos + newlineMatch.index + 1; // 改行の直後に挿入
+                        pos = pos + newlineMatch.index; // 改行の直前に挿入
                     }
                     // 改行がなければ endOffset のままで挿入
                 }
