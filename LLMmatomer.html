@@ -311,6 +311,44 @@
                         console.error("KaTeX rendering error:", e);
                     }
 
+                    // クリップボードイベント：コピー時に LaTeX コードを含める
+                    contentRef.current.addEventListener('copy', (e) => {
+                        const selection = window.getSelection();
+                        if (selection.rangeCount === 0) return;
+
+                        const range = selection.getRangeAt(0);
+                        const tempDiv = document.createElement('div');
+                        tempDiv.appendChild(range.cloneContents());
+
+                        // 選択範囲内の data-latex を抽出
+                        const mathSpans = tempDiv.querySelectorAll('[data-latex]');
+
+                        if (mathSpans.length > 0) {
+                            const text = selection.toString();
+                            // LaTeX から区切り文字（\(...\) や $...$）を削除して、本体のみ抽出
+                            const latexBodies = Array.from(mathSpans)
+                                .map(span => {
+                                    let latex = span.dataset.latex;
+                                    // \(...\) や \[...\] や $...$ を削除
+                                    return latex
+                                        .replace(/\\\(/, '')
+                                        .replace(/\\\)/, '')
+                                        .replace(/\\\[/, '')
+                                        .replace(/\\\]/, '')
+                                        .replace(/^\$\$/, '')
+                                        .replace(/\$\$$/, '')
+                                        .replace(/^\$/, '')
+                                        .replace(/\$$/, '');
+                                })
+                                .join('');
+
+                            // クリップボードにテキスト + LaTeX本体を設定
+                            e.preventDefault();
+                            e.clipboardData.setData('text/plain', text + ' ' + latexBodies);
+                            console.log('[Copy] Text:', text, 'LaTeX bodies:', latexBodies);
+                        }
+                    });
+
                     markerRef.current = new Mark(contentRef.current);
                 }
             }, [content]);
