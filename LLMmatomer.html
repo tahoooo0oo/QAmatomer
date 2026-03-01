@@ -118,6 +118,14 @@
 
         const generateId = () => Math.random().toString(36).substr(2, 9);
 
+        // LaTeX記号を削除してテキストを正規化
+        const sanitizeQuote = (text) => {
+            // インライン数式: \(...\) や $...$ を削除
+            let result = text.replace(/\\\([^\)]*\\\)/g, '').replace(/\$[^\$]*\$/g, '');
+            // 前後の空白を削除
+            return result.trim();
+        };
+
         // --- LocalStorage ヘルパー ---
         const Storage = {
             getProjectList() {
@@ -236,6 +244,7 @@
                                 acrossElements: true,
                                 separateWordSearch: false,
                                 diacritics: false,
+                                caseSensitive: false,
                                 exclude: [".katex *", ".katex", "code", "pre"],
                                 each: (el) => {
                                     el.dataset.annoId = anno.id;
@@ -874,14 +883,14 @@
                         id: generateId(),
                         type: 'add',
                         targetId: targetId,
-                        quote: quote
+                        quote: sanitizeQuote(quote)
                     });
                     return newPanes;
                 });
             };
 
             const saveNewAnnotation = (paneIndex, targetId, quote, title, content) => {
-                const newAnno = { id: generateId(), targetId, quote, title, content, timestamp: Date.now() };
+                const newAnno = { id: generateId(), targetId, quote: sanitizeQuote(quote), title, content, timestamp: Date.now() };
                 setAnnotations(prev => [...prev, newAnno]);
 
                 setPanes(prev => {
