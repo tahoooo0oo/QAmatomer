@@ -286,8 +286,13 @@
 
                     let html = marked.parse(processedText);
 
+                    // LaTeX を data-latex 属性で埋め込む
                     mathBlocks.forEach(block => {
-                        html = html.replace(block.id, block.content);
+                        const encoded = block.content
+                            .replace(/&/g, '&amp;')
+                            .replace(/"/g, '&quot;');
+                        const wrapper = `<span data-latex="${encoded}" class="math-latex-wrap">${block.content}</span>`;
+                        html = html.replace(block.id, wrapper);
                     });
 
                     contentRef.current.innerHTML = html;
@@ -958,6 +963,23 @@
                     console.log('[handleMouseUp] targetId:', targetId, 'mainText length:', mainText.length);
 
                     if (text.length >= 2 && selection.rangeCount > 0) {
+                        // 選択範囲内の LaTeX を抽出
+                        let enhancedText = text;
+                        if (selection.rangeCount > 0) {
+                            const range = selection.getRangeAt(0);
+                            const tempDiv = document.createElement('div');
+                            tempDiv.appendChild(range.cloneContents());
+                            const mathSpans = tempDiv.querySelectorAll('[data-latex]');
+
+                            if (mathSpans.length > 0) {
+                                const mathLaTeXes = Array.from(mathSpans)
+                                    .map(span => span.dataset.latex)
+                                    .join(' ');
+                                console.log('[Selection] Found LaTeX:', mathLaTeXes);
+                                enhancedText = text + ' ' + mathLaTeXes;
+                            }
+                        }
+
                         // マークダウンテキストを取得
                         let markdownText = '';
                         if (targetId === 'main') {
@@ -974,9 +996,10 @@
                         }
 
                         // マークダウン内の位置を計算
-                        const position = findMarkdownPosition(markdownText, text);
+                        const position = findMarkdownPosition(markdownText, enhancedText);
 
                         console.log('[Selection] Text:', text);
+                        console.log('[Selection] Enhanced text:', enhancedText);
                         console.log('[Selection] Position found:', position);
 
                         const range = selection.getRangeAt(0);
