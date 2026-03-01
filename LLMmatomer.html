@@ -108,6 +108,29 @@
             border-bottom: 2px solid #ca8a04;
             box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.3);
         }
+
+        /* Annotation anchor (footnote-style) */
+        .annotation-anchor {
+            background-color: transparent;
+            color: #2563eb;
+            font-weight: 600;
+            font-size: 0.75em;
+            vertical-align: super;
+            cursor: pointer;
+            padding: 0 2px;
+            border-radius: 2px;
+            transition: all 0.15s;
+            position: relative;
+        }
+        .annotation-anchor:hover {
+            background-color: rgba(37, 99, 235, 0.1);
+            color: #1e40af;
+        }
+        .annotation-anchor.active {
+            background-color: rgba(37, 99, 235, 0.2);
+            color: #1e40af;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3);
+        }
     </style>
 </head>
 <body>
@@ -118,102 +141,57 @@
 
         const generateId = () => Math.random().toString(36).substr(2, 9);
 
-        // マークダウン内のテキスト位置を特定する関数
-        const findMarkdownPosition = (markdown, selectedText) => {
-            if (!selectedText || !markdown) return null;
+        // Markdown offset ベースの注釈システム
+        // 注釈は startOffset, endOffset を持つ position オブジェクトで位置を特定
 
-            console.log('[findMarkdownPosition] Searching for:', selectedText.slice(0, 60));
+        // マークダウン内でテキストを検索（簡易版）
+        const findSimpleTextPosition = (markdown, searchText) => {
+            if (!searchText || !markdown) return null;
 
             // 完全マッチを試みる
-            const exactIndex = markdown.indexOf(selectedText);
-            if (exactIndex !== -1) {
-                console.log('[findMarkdownPosition] ✓ Exact match found at:', exactIndex);
+            const idx = markdown.indexOf(searchText);
+            if (idx !== -1) {
                 return {
-                    startOffset: exactIndex,
-                    endOffset: exactIndex + selectedText.length,
-                    quote: selectedText
+                    startOffset: idx,
+                    endOffset: idx + searchText.length,
+                    quote: searchText
                 };
             }
 
-            // 改行・複数空白を正規化して検索（HTMLレンダリング後の改行に対応）
-            const normalizeForSearch = (text) => {
-                return text.replace(/\s+/g, ' ').trim();
-            };
+            // 簡単な正規化（複数スペースを1つに）
+            const normalized = searchText.replace(/\s+/g, ' ').trim();
+            const normalizedMarkdown = markdown.replace(/\s+/g, ' ');
 
-            const normalized = normalizeForSearch(selectedText);
-            console.log('[findMarkdownPosition] Normalized to:', normalized.slice(0, 60));
-
-            // マークダウンから対応する部分を探す（ローリングウィンドウ）
-            for (let i = 0; i < markdown.length; i++) {
-                let j = i;
-                let selectedIdx = 0;
-
-                // 文字単位でマッチング（空白を柔軟に扱う）
-                while (j < markdown.length && selectedIdx < normalized.length) {
-                    const markdownChar = markdown[j];
-                    const normalizedChar = normalized[selectedIdx];
-
-                    if (/\s/.test(markdownChar)) {
-                        // マークダウン側が空白なら、スキップして次の非空白文字へ
-                        j++;
-                    } else if (/\s/.test(normalizedChar)) {
-                        // 正規化版が空白なら、正規化版の次の非空白へ
-                        selectedIdx++;
-                    } else if (markdownChar === normalizedChar) {
-                        j++;
-                        selectedIdx++;
-                    } else {
-                        break;  // マッチ失敗
-                    }
-                }
-
-                // 全文字マッチしたか確認
-                if (selectedIdx === normalized.length) {
-                    console.log('[findMarkdownPosition] ✓ Match found at:', i, 'length:', j - i);
-                    return {
-                        startOffset: i,
-                        endOffset: j,
-                        quote: markdown.slice(i, j)
-                    };
-                }
+            const nIdx = normalizedMarkdown.indexOf(normalized);
+            if (nIdx !== -1) {
+                return {
+                    startOffset: nIdx,
+                    endOffset: nIdx + normalized.length,
+                    quote: normalized
+                };
             }
 
-            console.log('[findMarkdownPosition] ✗ No match found');
-            console.log('[findMarkdownPosition] Markdown sample:', markdown.slice(0, 100));
             return null;
         };
 
-        // LaTeX記号と数学フォント、改行を削除してテキストを正規化
-        const sanitizeQuote = (text) => {
-            // 複数行の改行を1つのスペースに統一
-            let result = text.replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\r/g, ' ');
+        // マークダウンにアンカーを inject する
+        const injectAnnotationAnchors = (markdown, annotations) => {
+            if (!annotations || annotations.length === 0) return markdown;
 
-            // LaTeX記号を削除
-            result = result.replace(/\\\([^\)]*\\\)/g, ' ').replace(/\$[^\$]*\$/g, ' ');
+            // 位置でソート（後ろから挿入するため逆順）
+            const sorted = [...annotations]
+                .filter(a => a.position && a.position.startOffset !== undefined)
+                .sort((a, b) => (b.position.startOffset || 0) - (a.position.startOffset || 0));
 
-            // 数学フォント（Math Alphanumeric Symbols: U+1D400～U+1D7FF）を削除
-            result = result.replace(/[\u1D400-\u1D7FF]/g, (m) => {
-                // 簡易マッピング（主要な小文字）
-                const code = m.charCodeAt(0);
-                // 𝑎=U+1D41A から 𝑧=U+1D433
-                if (code >= 0x1D41A && code <= 0x1D433) {
-                    return String.fromCharCode(0x61 + (code - 0x1D41A)); // a-z
+            let result = markdown;
+            sorted.forEach((anno, idx) => {
+                const anchorNum = sorted.length - idx; // 後ろから挿入するので逆順
+                const pos = anno.position.startOffset;
+                if (pos !== undefined && pos >= 0 && pos <= result.length) {
+                    const anchor = `<span class="annotation-anchor" data-anno-id="${anno.id}" title="${anno.title || '注釈'}" data-anno-num="${anchorNum}">*${anchorNum}</span>`;
+                    result = result.slice(0, pos) + anchor + result.slice(pos);
                 }
-                return ' '; // それ以外は削除
             });
-
-            // Greek letters と数学記号を削除
-            result = result.replace(/[\u0370-\u03FF\u1D6A4-\u1D7FF]/g, ' ');
-
-            // 特殊な数学記号を正規形に
-            result = result.replace(/[′]/g, "'");   // プライム
-            result = result.replace(/[−]/g, "-");   // マイナス
-            result = result.replace(/[·]/g, "*");   // 中点
-            result = result.replace(/[×]/g, "*");   // かけ算記号
-            result = result.replace(/[÷]/g, "/");   // わり算記号
-
-            // 複数の空白を1つに
-            result = result.replace(/\s+/g, ' ').trim();
 
             return result;
         };
@@ -284,6 +262,9 @@
                         return id;
                     });
 
+                    // 注釈のアンカーを inject
+                    processedText = injectAnnotationAnchors(processedText, annotations);
+
                     let html = marked.parse(processedText);
 
                     // LaTeX を data-latex 属性で埋め込む
@@ -349,136 +330,39 @@
                         }
                     });
 
-                    markerRef.current = new Mark(contentRef.current);
-                }
-            }, [content]);
-
-            useEffect(() => {
-                if (!markerRef.current) return;
-
-                let isCancelled = false;
-
-                markerRef.current.unmark({
-                    done: () => {
-                        if (isCancelled || !annotations || annotations.length === 0) return;
-
-                        const markNext = (index) => {
-                            if (isCancelled) return;
-                            if (index >= annotations.length) return;
-                            const anno = annotations[index];
-
-                            // 位置情報を優先的に使用、なければ quote を使用
-                            const quoteText = anno.position?.quote || anno.quote;
-
-                            if (!quoteText) {
-                                markNext(index + 1);
-                                return;
+                    // 注釈アンカーのクリックハンドラーを設定
+                    const anchors = contentRef.current.querySelectorAll('.annotation-anchor');
+                    anchors.forEach(anchor => {
+                        anchor.addEventListener('click', () => {
+                            const annoId = anchor.dataset.annoId;
+                            if (annoId) {
+                                const anno = annotations.find(a => a.id === annoId);
+                                if (anno) {
+                                    setActiveAnnotationId(anno.id);
+                                }
                             }
+                        });
 
-                            console.log('[Mark.js] Searching for:', quoteText.slice(0, 50), '... ID:', anno.id);
+                        // ホバーでタイトルを表示
+                        anchor.style.cursor = 'pointer';
+                    });
+                }
+            }, [content, annotations]);
 
-                            const activeClass = activeAnnotationId === anno.id ? 'active' : '';
+            // Annotation anchor のアクティブ状態を更新
+            useEffect(() => {
+                const anchors = contentRef.current?.querySelectorAll('.annotation-anchor');
+                if (!anchors) return;
 
-                            // 複数のパターンで検索を試みる
-                            const searchPatterns = [
-                                quoteText,  // そのまま
-                                quoteText.replace(/\n+/g, ' '),  // 改行をスペースに
-                                quoteText.replace(/\s+/g, ' '),  // 複数空白を1つに
-                            ];
-
-                            let matched = false;
-                            const tryNextPattern = (patternIdx) => {
-                                if (matched || patternIdx >= searchPatterns.length) {
-                                    if (!matched) {
-                                        console.log('[Mark.js] ✗ No match found for any pattern');
-                                    }
-                                    markNext(index + 1);
-                                    return;
-                                }
-
-                                const searchText = searchPatterns[patternIdx];
-                                if (!searchText || searchText.length === 0) {
-                                    tryNextPattern(patternIdx + 1);
-                                    return;
-                                }
-
-                                console.log('[Mark.js] Attempt', patternIdx + 1, ':', searchText.slice(0, 50));
-
-                                markerRef.current.mark(searchText, {
-                                className: `annotation-mark ${activeClass}`,
-                                acrossElements: true,
-                                separateWordSearch: false,
-                                diacritics: false,
-                                caseSensitive: false,
-                                accuracy: 'flexible',  // より柔軟なマッチング
-                                each: (el) => {
-                                    el.dataset.annoId = anno.id;
-                                    el.onmouseenter = () => {
-                                        if (callbacksRef.current.onMarkHover) {
-                                            const rect = el.getBoundingClientRect();
-                                            const titles = [];
-                                            let n = el;
-                                            while (n) {
-                                                if (n.dataset && n.dataset.annoId) {
-                                                    const a = annotations.find(x => x.id === n.dataset.annoId);
-                                                    if (a && a.title && !titles.includes(a.title)) titles.push(a.title);
-                                                }
-                                                if (n === contentRef.current) break;
-                                                n = n.parentElement;
-                                            }
-                                            callbacksRef.current.onMarkHover(true, titles.length > 1 ? titles.join(' / ') : (anno.title || '注釈を表示'), rect);
-                                        }
-                                    };
-                                    el.onmouseleave = () => {
-                                        if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false);
-                                    };
-
-                                    el.onclick = (e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        window.getSelection().removeAllRanges();
-                                        if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false);
-                                        const annoIds = [];
-                                        let node = e.target;
-                                        while (node) {
-                                            if (node.dataset && node.dataset.annoId) {
-                                                if (!annoIds.includes(node.dataset.annoId)) annoIds.push(node.dataset.annoId);
-                                            }
-                                            if (node === contentRef.current) break;
-                                            node = node.parentElement;
-                                        }
-                                        if (annoIds.length > 1 && callbacksRef.current.onMultiMarkClick) {
-                                            const rect = el.getBoundingClientRect();
-                                            callbacksRef.current.onMultiMarkClick(annoIds, rect);
-                                        } else {
-                                            if (callbacksRef.current.onMarkClick) callbacksRef.current.onMarkClick(annoIds[0] || anno.id);
-                                        }
-                                    };
-                                },
-                                done: (count) => {
-                                    if (count > 0) {
-                                        matched = true;
-                                        console.log('[Mark.js] ✓ Matched:', count, 'with pattern', patternIdx + 1);
-                                        markNext(index + 1);
-                                    } else {
-                                        tryNextPattern(patternIdx + 1);
-                                    }
-                                }
-                                });
-                            };
-
-                            tryNextPattern(0);
-                        };
-
-                        markNext(0);
+                anchors.forEach(anchor => {
+                    const annoId = anchor.dataset.annoId;
+                    if (activeAnnotationId === annoId) {
+                        anchor.classList.add('active');
+                    } else {
+                        anchor.classList.remove('active');
                     }
                 });
-
-                return () => {
-                    isCancelled = true;
-                    if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false);
-                };
-            }, [content, annotationsStr, activeAnnotationId]);
+            }, [activeAnnotationId]);
 
             return <div ref={contentRef} className={className}></div>;
         };
@@ -1034,7 +918,7 @@
                         }
 
                         // マークダウン内の位置を計算
-                        const position = findMarkdownPosition(markdownText, enhancedText);
+                        const position = findSimpleTextPosition(markdownText, text);
 
                         console.log('[Selection] Text:', text);
                         console.log('[Selection] Enhanced text:', enhancedText);
