@@ -111,25 +111,31 @@
 
         /* Annotation anchor (footnote-style) */
         .annotation-anchor {
-            background-color: transparent;
-            color: #2563eb;
-            font-weight: 600;
-            font-size: 0.75em;
-            vertical-align: super;
+            background-color: #fbbf24;
+            color: #78350f;
+            font-weight: 700;
+            font-size: 0.85em;
+            vertical-align: baseline;
             cursor: pointer;
-            padding: 0 2px;
-            border-radius: 2px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1.5px solid #f59e0b;
             transition: all 0.15s;
             position: relative;
+            display: inline-block;
+            margin: 0 2px;
         }
         .annotation-anchor:hover {
-            background-color: rgba(37, 99, 235, 0.1);
-            color: #1e40af;
+            background-color: #f59e0b;
+            color: #451a03;
+            box-shadow: 0 2px 6px rgba(245, 158, 11, 0.4);
+            transform: scale(1.1);
         }
         .annotation-anchor.active {
-            background-color: rgba(37, 99, 235, 0.2);
-            color: #1e40af;
-            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.3);
+            background-color: #f59e0b;
+            color: #451a03;
+            box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3);
+            font-weight: 800;
         }
     </style>
 </head>
@@ -180,7 +186,7 @@
 
             // 注釈に position がない場合は quote から position を計算
             const enrichedAnnos = annotations.map(anno => {
-                if (anno.position && anno.position.startOffset !== undefined) {
+                if (anno.position && anno.position.endOffset !== undefined) {
                     return anno;
                 }
 
@@ -193,18 +199,18 @@
                 }
 
                 return null;
-            }).filter(a => a && a.position && a.position.startOffset !== undefined);
+            }).filter(a => a && a.position && a.position.endOffset !== undefined);
 
             // 位置でソート（後ろから挿入するため逆順）
             const sorted = [...enrichedAnnos]
-                .sort((a, b) => (b.position.startOffset || 0) - (a.position.startOffset || 0));
+                .sort((a, b) => (b.position.endOffset || 0) - (a.position.endOffset || 0));
 
             let result = markdown;
             sorted.forEach((anno, idx) => {
                 const anchorNum = sorted.length - idx; // 後ろから挿入するので逆順
-                const pos = anno.position.startOffset;
+                const pos = anno.position.endOffset;
                 if (pos !== undefined && pos >= 0 && pos <= result.length) {
-                    const anchor = `<span class="annotation-anchor" data-anno-id="${anno.id}" title="${anno.title || '注釈'}" data-anno-num="${anchorNum}">*${anchorNum}</span>`;
+                    const anchor = `<span class="annotation-anchor" data-anno-id="${anno.id}" title="${anno.title || '注釈'}" data-anno-num="${anchorNum}">[${anchorNum}]</span>`;
                     result = result.slice(0, pos) + anchor + result.slice(pos);
                 }
             });
