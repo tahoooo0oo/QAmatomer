@@ -268,12 +268,16 @@
 
                             const activeClass = activeAnnotationId === anno.id ? 'active' : '';
 
-                            markerRef.current.mark(anno.quote, {
+                            // 複数行のテキストに対応：改行をスペースに統一して検索
+                            const searchText = anno.quote.replace(/\n+/g, ' ');
+
+                            markerRef.current.mark(searchText, {
                                 className: `annotation-mark ${activeClass}`,
                                 acrossElements: true,
                                 separateWordSearch: false,
                                 diacritics: false,
                                 caseSensitive: false,
+                                accuracy: 'flexible',  // より柔軟なマッチング
                                 each: (el) => {
                                     el.dataset.annoId = anno.id;
                                     el.onmouseenter = () => {
