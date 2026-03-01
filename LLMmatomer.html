@@ -118,11 +118,31 @@
 
         const generateId = () => Math.random().toString(36).substr(2, 9);
 
-        // LaTeX記号を削除してテキストを正規化
+        // LaTeX記号と数学フォント、改行を削除してテキストを正規化
         const sanitizeQuote = (text) => {
-            // インライン数式: \(...\) や $...$ を削除
-            let result = text.replace(/\\\([^\)]*\\\)/g, '').replace(/\$[^\$]*\$/g, '');
-            // 前後の空白を削除
+            // 複数行の改行を1つのスペースに統一
+            let result = text.replace(/\s+/g, ' ').trim();
+
+            // LaTeX記号を削除
+            result = result.replace(/\\\([^\)]*\\\)/g, '').replace(/\$[^\$]*\$/g, '');
+
+            // 数学記号を統一（数学フォント版を削除）
+            // 例：𝑟 → r, ′ → ', etc.
+            result = result.replace(/[𝑎𝑏𝑐𝑑𝑒𝑓𝑔ℎ𝑖𝑗𝑘𝑙𝑚𝑛𝑜𝑝𝑞𝑟𝑠𝑡𝑢𝑣𝑤𝑥𝑦𝑧]/g, (m) => {
+                const mapping = {
+                    '𝑎': 'a', '𝑏': 'b', '𝑐': 'c', '𝑑': 'd', '𝑒': 'e', '𝑓': 'f', '𝑔': 'g',
+                    'ℎ': 'h', '𝑖': 'i', '𝑗': 'j', '𝑘': 'k', '𝑙': 'l', '𝑚': 'm', '𝑛': 'n',
+                    '𝑜': 'o', '𝑝': 'p', '𝑞': 'q', '𝑟': 'r', '𝑠': 's', '𝑡': 't', '𝑢': 'u',
+                    '𝑣': 'v', '𝑤': 'w', '𝑥': 'x', '𝑦': 'y', '𝑧': 'z'
+                };
+                return mapping[m] || m;
+            });
+
+            // 数学記号を正規フォントに統一
+            result = result.replace(/[′]/g, "'");  // プライム記号
+            result = result.replace(/[−]/g, "-");  // マイナス記号
+
+            // 前後の空白をもう一度削除
             return result.trim();
         };
 
@@ -821,8 +841,10 @@
                     const text = selection.toString().trim();
 
                     // デバッグ: コンソールに記録
+                    const sanitized = sanitizeQuote(text);
                     console.log('[Annotation Debug] Selected text:', text);
-                    console.log('[Annotation Debug] Sanitized:', sanitizeQuote(text));
+                    console.log('[Annotation Debug] Sanitized:', sanitized);
+                    console.log('[Annotation Debug] Text length:', text.length, '→', sanitized.length);
 
                     if (text.length >= 2 && selection.rangeCount > 0) {
                         const range = selection.getRangeAt(0);
