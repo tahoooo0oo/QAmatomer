@@ -133,20 +133,25 @@
             border: none;
             color: #f59e0b;
             font-weight: 700;
-            font-size: 0.9em;
+            font-size: 0.7em;
             cursor: pointer;
             transition: all 0.15s;
             padding: 0;
             width: 100%;
             text-align: center;
+            line-height: 1;
+            height: auto;
+            margin: 0;
         }
         .annotation-anchor-margin:hover {
             color: #d97706;
             text-decoration: underline;
+            font-size: 0.8em;
         }
         .annotation-anchor-margin.active {
             color: #d97706;
             font-weight: 800;
+            font-size: 0.8em;
         }
     </style>
 </head>
@@ -431,9 +436,10 @@
 
                 // マージンをクリア
                 anchorsContainerRef.current.innerHTML = '';
-                let currentY = 0;
 
-                // 各注釈について、quote に基づいてアンカー位置を計算
+                // 各注釈の Y 位置を計算
+                const anchorPositions = []; // { annoId, y, idx }
+
                 annotations.forEach((anno, idx) => {
                     if (!anno.quote) return;
 
@@ -446,7 +452,6 @@
                     );
 
                     let node;
-                    let found = false;
                     while (node = treeWalker.nextNode()) {
                         if (node.textContent.includes(anno.quote)) {
                             // quote を含むテキストノードを見つけた
@@ -455,33 +460,51 @@
                             const rect = range.getBoundingClientRect();
                             const containerRect = contentRef.current.getBoundingClientRect();
 
-                            // 相対位置を計算
+                            // テキストの下端を基準に位置を計算
                             const relativeY = rect.bottom - containerRect.top;
-
-                            // マージンにアンカーを作成
-                            const anchorNum = idx + 1;
-                            const marginAnchor = document.createElement('button');
-                            marginAnchor.className = 'annotation-anchor-margin';
-                            marginAnchor.textContent = `[${anchorNum}]`;
-                            marginAnchor.dataset.annoId = anno.id;
-                            marginAnchor.style.position = 'absolute';
-                            marginAnchor.style.top = `${currentY}px`;
-                            marginAnchor.style.cursor = 'pointer';
-
-                            marginAnchor.addEventListener('click', (e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                if (onAnnotationClick) {
-                                    onAnnotationClick(anno.id);
-                                }
+                            anchorPositions.push({
+                                annoId: anno.id,
+                                y: relativeY,
+                                idx: idx + 1
                             });
-
-                            anchorsContainerRef.current.appendChild(marginAnchor);
-                            currentY += 30; // 次のアンカー位置
-                            found = true;
                             break;
                         }
                     }
+                });
+
+                // 同じ Y 位置のアンカーをグループ化
+                const positionMap = new Map();
+                anchorPositions.forEach(pos => {
+                    const key = Math.round(pos.y / 10) * 10; // 10px単位でグループ化
+                    if (!positionMap.has(key)) {
+                        positionMap.set(key, []);
+                    }
+                    positionMap.get(key).push(pos);
+                });
+
+                // マージンにアンカーを配置
+                positionMap.forEach((positions, baseY) => {
+                    positions.forEach((pos, offsetIdx) => {
+                        const marginAnchor = document.createElement('button');
+                        marginAnchor.className = 'annotation-anchor-margin';
+                        marginAnchor.textContent = `[${pos.idx}]`;
+                        marginAnchor.dataset.annoId = pos.annoId;
+                        marginAnchor.style.position = 'absolute';
+                        // 同じ行に複数ある場合は上下に詰めて配置（5px間隔）
+                        marginAnchor.style.top = `${baseY + offsetIdx * 5}px`;
+                        marginAnchor.style.cursor = 'pointer';
+                        marginAnchor.style.fontSize = '0.75em';
+
+                        marginAnchor.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (onAnnotationClick) {
+                                onAnnotationClick(pos.annoId);
+                            }
+                        });
+
+                        anchorsContainerRef.current.appendChild(marginAnchor);
+                    });
                 });
             }, [content, annotations]);
 
