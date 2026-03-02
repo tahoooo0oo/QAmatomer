@@ -393,6 +393,37 @@
 
         // --- View Pane ---
         const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, onEdit, onDelete, onClose, onAddChild, onOpenChild }) => {
+            // 子ノードをグループごとに分類
+            const groupedChildren = {};
+            const ungroupedChildren = [];
+
+            node.children.forEach(childNode => {
+                if (!childNode) return;
+                const groupName = childNode.group?.trim();
+                if (groupName) {
+                    if (!groupedChildren[groupName]) groupedChildren[groupName] = [];
+                    groupedChildren[groupName].push(childNode);
+                } else {
+                    ungroupedChildren.push(childNode);
+                }
+            });
+
+            const renderChildNode = (childNode) => {
+                const isChildSelected = selectedChildId === childNode.id;
+                return (
+                    <div 
+                        key={childNode.id}
+                        onClick={() => onOpenChild(childNode.id)}
+                        className={`p-4 rounded-xl border transition-all cursor-pointer group bg-white ${isChildSelected ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-sm' : 'border-gray-200 hover:border-blue-300 hover:shadow-md'}`}
+                    >
+                        <div className="font-bold text-gray-800 flex items-start gap-2.5">
+                            <i className={`ph-fill ph-question mt-0.5 shrink-0 ${isChildSelected ? 'text-blue-600' : 'text-gray-300 group-hover:text-blue-400 transition-colors'}`}></i>
+                            <span className="leading-relaxed">{childNode.question}</span>
+                        </div>
+                    </div>
+                );
+            };
+
             return (
                 <div className={`flex flex-col h-full bg-white border-r border-gray-200 shrink-0 w-[90vw] md:w-[50vw] lg:w-[45vw] xl:w-[40vw] relative z-0 shadow-[4px_0_24px_rgba(0,0,0,0.06)] animate-slide-in-right ${isRoot ? 'bg-slate-50' : ''}`}>
                     {breadcrumb.length > 0 && <BreadcrumbTrail path={breadcrumb} />}
@@ -452,22 +483,23 @@
                                         <p className="text-sm text-gray-500 font-medium">{isRoot ? '最初の質問を追加しましょう。' : 'さらに深掘りしたい質問を追加しましょう。'}</p>
                                     </div>
                                 ) : (
-                                    node.children.map(childNode => {
-                                        if (!childNode) return null;
-                                        const isChildSelected = selectedChildId === childNode.id;
-                                        return (
-                                            <div 
-                                                key={childNode.id}
-                                                onClick={() => onOpenChild(childNode.id)}
-                                                className={`p-4 rounded-xl border transition-all cursor-pointer group ${isChildSelected ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-sm' : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-md'}`}
-                                            >
-                                                <div className="font-bold text-gray-800 flex items-start gap-2.5">
-                                                    <i className={`ph-fill ph-question mt-0.5 shrink-0 ${isChildSelected ? 'text-blue-600' : 'text-gray-300 group-hover:text-blue-400 transition-colors'}`}></i>
-                                                    <span className="leading-relaxed">{childNode.question}</span>
+                                    <>
+                                        {Object.entries(groupedChildren).map(([groupName, children]) => (
+                                            <div key={groupName} className="mb-6 bg-slate-100 p-4 rounded-xl border border-slate-200">
+                                                <div className="text-sm font-bold text-slate-500 mb-3 flex items-center gap-2">
+                                                    <i className="ph-fill ph-folder-notch"></i> {groupName}
+                                                </div>
+                                                <div className="space-y-3">
+                                                    {children.map(childNode => renderChildNode(childNode))}
                                                 </div>
                                             </div>
-                                        );
-                                    })
+                                        ))}
+                                        {ungroupedChildren.length > 0 && (
+                                            <div className="space-y-3">
+                                                {ungroupedChildren.map(childNode => renderChildNode(childNode))}
+                                            </div>
+                                        )}
+                                    </>
                                 )}
                             </div>
                         </div>
@@ -477,10 +509,11 @@
         };
 
         // --- Edit / Add Pane ---
-        const EditPane = ({ mode, isTopLevel, initialQuestion, initialAnswer, breadcrumb, onSave, onCancel }) => {
+        const EditPane = ({ mode, isTopLevel, initialQuestion, initialAnswer, initialGroup, breadcrumb, existingGroups, onSave, onCancel }) => {
             const isAdd = mode === 'add';
             const [question, setQuestion] = useState(initialQuestion || '');
             const [answer, setAnswer] = useState(initialAnswer || '');
+            const [group, setGroup] = useState(initialGroup || '');
 
             return (
                 <div className="flex flex-col h-full bg-slate-50 border-r border-gray-200 shrink-0 w-[90vw] md:w-[50vw] lg:w-[45vw] xl:w-[40vw] relative z-0 shadow-[4px_0_24px_rgba(0,0,0,0.06)] animate-slide-in-right">
@@ -509,6 +542,24 @@
                                 placeholder={isTopLevel ? "例：React Hooksとは何ですか？" : "例：なぜその技術が必要なのですか？"}
                             />
                         </div>
+                        <div>
+                            <label className="block text-sm font-bold text-gray-600 mb-2 flex items-center gap-1">
+                                <i className="ph-fill ph-folder-notch text-blue-500"></i> グループ名 (任意)
+                            </label>
+                            <input
+                                type="text"
+                                value={group}
+                                onChange={e => setGroup(e.target.value)}
+                                list="existing-groups"
+                                className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white shadow-sm text-gray-800"
+                                placeholder="例：基礎知識"
+                            />
+                            {existingGroups && existingGroups.length > 0 && (
+                                <datalist id="existing-groups">
+                                    {existingGroups.map((g, i) => <option key={i} value={g} />)}
+                                </datalist>
+                            )}
+                        </div>
                         <div className="flex-1 flex flex-col min-h-[300px]">
                             <label className="block text-sm font-bold text-gray-600 mb-2 flex justify-between items-end">
                                 <span className="flex items-center gap-1"><i className="ph-fill ph-check-circle text-green-500"></i> 回答・解説</span>
@@ -528,7 +579,7 @@
                             キャンセル
                         </button>
                         <button
-                            onClick={() => onSave(question, answer)}
+                            onClick={() => onSave(question, answer, group)}
                             disabled={!question.trim()}
                             className="px-6 py-2.5 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-sm"
                         >
@@ -670,14 +721,14 @@
                 delete nodesObj[nodeId];
             };
 
-            const handleSaveNode = (paneIndex, type, idOrParentId, question, answer) => {
+            const handleSaveNode = (paneIndex, type, idOrParentId, question, answer, group = '') => {
                 if (type === 'add') {
                     const newNodeId = generateId();
                     const parentId = idOrParentId;
                     
                     setNodes(prev => {
                         const next = { ...prev };
-                        next[newNodeId] = { id: newNodeId, parentId, question, answer, children: [] };
+                        next[newNodeId] = { id: newNodeId, parentId, question, answer, group, children: [] };
                         next[parentId] = {
                             ...next[parentId],
                             children: [...next[parentId].children, newNodeId]
@@ -696,7 +747,7 @@
                     
                     setNodes(prev => ({
                         ...prev,
-                        [nodeId]: { ...prev[nodeId], question, answer }
+                        [nodeId]: { ...prev[nodeId], question, answer, group }
                     }));
                     
                     setPanes(prev => {
@@ -916,6 +967,9 @@
                                         const node = isAdd ? null : nodes[pane.nodeId];
                                         const isTopLevel = isAdd ? pane.parentId === 'root' : false;
                                         
+                                        // 既存のグループ名を抽出して重複を排除
+                                        const existingGroups = Array.from(new Set(Object.values(nodes).map(n => n.group?.trim()).filter(Boolean)));
+                                        
                                         return (
                                             <EditPane
                                                 key={`pane-${index}-${pane.type}`}
@@ -923,8 +977,10 @@
                                                 isTopLevel={isTopLevel}
                                                 initialQuestion={node?.question || ''}
                                                 initialAnswer={node?.answer || ''}
+                                                initialGroup={node?.group || ''}
                                                 breadcrumb={breadcrumb}
-                                                onSave={(q, a) => handleSaveNode(index, pane.type, isAdd ? pane.parentId : pane.nodeId, q, a)}
+                                                existingGroups={existingGroups}
+                                                onSave={(q, a, g) => handleSaveNode(index, pane.type, isAdd ? pane.parentId : pane.nodeId, q, a, g)}
                                                 onCancel={() => {
                                                     if (isAdd) {
                                                         setPanes(prev => prev.slice(0, index));
