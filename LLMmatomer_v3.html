@@ -680,22 +680,30 @@
         };
 
         // --- コンポーネント: 主軸テキスト入力画面 ---
-        const SetupScreen = ({ initialName, initialText, isNew, onSave, onCancel, editorScrollPosition }) => {
+        const SetupScreen = ({ initialName, initialText, isNew, onSave, onCancel, editorScrollPosition, editorSelection }) => {
             const [name, setName] = useState(initialName || '');
             const [text, setText] = useState(initialText || '');
             const textareaRef = useRef(null);
 
             // editorScrollPosition が設定されたら、スクロール位置を復元
             useEffect(() => {
-                if (editorScrollPosition !== null && editorScrollPosition !== undefined && textareaRef.current) {
+                if (textareaRef.current) {
                     const textarea = textareaRef.current;
                     setTimeout(() => {
                         textarea.focus();
-                        // スクロール位置をそのまま適用
-                        textarea.scrollTop = editorScrollPosition;
+
+                        // editorSelection がある場合、テキストをハイライト
+                        if (editorSelection && editorSelection.start !== undefined && editorSelection.end !== undefined) {
+                            textarea.setSelectionRange(editorSelection.start, editorSelection.end);
+                        }
+
+                        // スクロール位置を適用
+                        if (editorScrollPosition !== null && editorScrollPosition !== undefined) {
+                            textarea.scrollTop = editorScrollPosition;
+                        }
                     }, 50);
                 }
-            }, [editorScrollPosition]);
+            }, [editorScrollPosition, editorSelection]);
 
             return (
                 <div className="flex flex-col items-center justify-center h-[calc(100vh-56px)] bg-gray-50 p-6">
@@ -831,6 +839,7 @@
             const [tooltip, setTooltip] = useState({ show: false, text: '', top: 0, left: 0 });
             const [annotationPicker, setAnnotationPicker] = useState({ show: false, annoIds: [], top: 0, left: 0, paneIndex: 0 });
             const [editorScrollPosition, setEditorScrollPosition] = useState(null);
+            const [editorSelection, setEditorSelection] = useState(null); // { start, end, text }
 
             const scrollContainerRef = useRef(null);
 
@@ -1057,6 +1066,8 @@
                 Storage.saveProjectData(id, { mainText: text, annotations });
                 setAppMode('workspace');
                 setPanes([{ id: 'pane-main', type: 'main', targetId: 'main' }]);
+                setEditorScrollPosition(null);
+                setEditorSelection(null);
             };
 
             const handleResetAnnotations = () => {
@@ -1083,11 +1094,28 @@
                 setAppMode('setup');
             };
 
-            // ダブルクリック時: スクロール位置を保存
+            // ダブルクリック時: ダブルクリックしたテキスト位置を計算
             const handleDoubleClick = (e, paneIndex) => {
-                const element = e.currentTarget;
-                const scrollPosition = element.scrollTop;
-                setEditorScrollPosition(scrollPosition);
+                const selection = window.getSelection();
+                const selectedText = selection.toString().trim();
+
+                if (selectedText && paneIndex === 0) {
+                    // 選択テキストをmarkdownソース内で検索
+                    const index = mainText.indexOf(selectedText);
+                    if (index !== -1) {
+                        const start = index;
+                        const end = index + selectedText.length;
+
+                        // スクロール位置を計算（選択テキストの開始位置の前のテキスト行数を基に）
+                        const textBeforeSelection = mainText.substring(0, start);
+                        const linesBeforeSelection = textBeforeSelection.split('\n').length - 1;
+                        const approximateScrollPosition = Math.max(0, linesBeforeSelection * 24 - 100);
+
+                        setEditorScrollPosition(approximateScrollPosition);
+                        setEditorSelection({ start, end, text: selectedText });
+                    }
+                }
+
                 setAppMode('setup');
             };
 
@@ -1471,8 +1499,9 @@
                             initialText={mainText}
                             isNew={!currentProjectId}
                             onSave={handleSaveMainText}
-                            onCancel={currentProjectId ? () => { setAppMode('workspace'); setEditorScrollPosition(null); } : (projectList.length > 0 ? () => setAppMode('home') : null)}
+                            onCancel={currentProjectId ? () => { setAppMode('workspace'); setEditorScrollPosition(null); setEditorSelection(null); } : (projectList.length > 0 ? () => setAppMode('home') : null)}
                             editorScrollPosition={editorScrollPosition}
+                            editorSelection={editorSelection}
                         />
                     )}
 
