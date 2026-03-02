@@ -154,6 +154,18 @@
             }
         };
 
+        // --- ユーティリティ: 行オフセットマップを作成 ---
+        const createLineOffsetMap = (markdown) => {
+            const lines = markdown.split('\n');
+            const lineOffsets = [];
+            let currentOffset = 0;
+            for (let i = 0; i < lines.length; i++) {
+                lineOffsets.push({ line: i, start: currentOffset, end: currentOffset + lines[i].length });
+                currentOffset += lines[i].length + 1; // +1 for \n
+            }
+            return lineOffsets;
+        };
+
         // --- コンポーネント: Markdown & KaTeX & Highlight ビュワー ---
         const MarkdownViewer = ({ content, className = "markdown-body", annotations = [], onMarkClick, onMultiMarkClick, onMarkHover, activeAnnotationId }) => {
             const contentRef = useRef(null);
@@ -203,6 +215,43 @@
                     });
 
                     contentRef.current.innerHTML = html;
+
+                    // 行オフセットマップを作成
+                    const lineOffsetMap = createLineOffsetMap(content);
+
+                    // 各ブロック要素に行情報を付与
+                    const walkAndAssignLines = (node) => {
+                        if (node.nodeType === 1) {  // Element node
+                            // ブロック要素の判定
+                            const tagName = node.tagName.toLowerCase();
+                            if (['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'pre', 'ul', 'ol', 'li'].includes(tagName)) {
+                                // この要素のテキストから行番号を判定
+                                const elementText = node.textContent?.trim() || '';
+                                if (elementText) {
+                                    // 元のコンテンツ内でこのテキストを検索
+                                    const foundIndex = content.indexOf(elementText);
+                                    if (foundIndex !== -1) {
+                                        // 該当する行を見つける
+                                        let offset = 0;
+                                        let lineNum = 0;
+                                        for (let i = 0; i < lineOffsetMap.length; i++) {
+                                            if (lineOffsetMap[i].start <= foundIndex && foundIndex <= lineOffsetMap[i].end) {
+                                                lineNum = i;
+                                                break;
+                                            }
+                                        }
+                                        node.setAttribute('data-line', lineNum.toString());
+                                    }
+                                }
+                            }
+                            // 子ノードも処理
+                            for (let child of node.childNodes) {
+                                walkAndAssignLines(child);
+                            }
+                        }
+                    };
+
+                    walkAndAssignLines(contentRef.current);
 
                     try {
                         renderMathInElement(contentRef.current, {
