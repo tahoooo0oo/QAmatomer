@@ -171,6 +171,7 @@
                 if (contentRef.current && content) {
                     const mathBlocks = [];
                     let processedText = content;
+                    const mdPositionMap = [];  // Markdown内の位置を追跡
 
                     processedText = processedText.replace(/\$\$([\s\S]+?)\$\$/g, (match, p1) => {
                         const id = `MATHBLOCK${mathBlocks.length}END`;
@@ -196,6 +197,18 @@
                         return id;
                     });
 
+                    // カスタムレンダラーで各テキストにMarkdown内の位置を埋め込む
+                    let charPos = 0;
+                    const renderer = new marked.Renderer();
+                    const originalText = renderer.text.bind(renderer);
+                    renderer.text = function(token) {
+                        const text = token.text;
+                        const startPos = charPos;
+                        charPos += text.length;
+                        return `<span data-md-start="${startPos}" data-md-end="${charPos}" class="md-positioned">${text}</span>`;
+                    };
+
+                    marked.setOptions({ renderer });
                     let html = marked.parse(processedText);
 
                     mathBlocks.forEach(block => {
@@ -962,26 +975,53 @@
                 }, 10);
             };
 
-            // ダブルクリック時: レンダリング表示のテキスト位置からmarkdownエディタの該当位置へジャンプ
+            // ダブルクリック時: DOMのデータ属性からMarkdown内の位置を正確に取得
             const handleDoubleClick = (e, paneIndex) => {
                 const selection = window.getSelection();
-                const selectedText = selection.toString().trim();
+                if (!selection.rangeCount || paneIndex !== 0) {
+                    setAppMode('setup');
+                    return;
+                }
 
-                if (selectedText && paneIndex === 0) {
-                    // 選択テキストをmarkdownソース内で検索
-                    const index = mainText.indexOf(selectedText);
-                    if (index !== -1) {
-                        const start = index;
-                        const end = index + selectedText.length;
+                const range = selection.getRangeAt(0);
+                let mdStart = null;
+                let mdEnd = null;
 
-                        // スクロール位置を計算（選択テキストの開始位置の前の行数を基に）
-                        const textBeforeSelection = mainText.substring(0, start);
-                        const linesBeforeSelection = textBeforeSelection.split('\n').length - 1;
-                        const approximateScrollPosition = Math.max(0, linesBeforeSelection * 24 - 100);
-
-                        setEditorScrollPosition(approximateScrollPosition);
-                        setEditorSelection({ start, end, text: selectedText });
+                // 選択範囲の開始ノードから親をたどり、data-md-start属性を探す
+                let node = range.startContainer;
+                while (node && mdStart === null) {
+                    if (node.nodeType === 1) {  // Element node
+                        const start = node.getAttribute('data-md-start');
+                        const end = node.getAttribute('data-md-end');
+                        if (start !== null) {
+                            mdStart = parseInt(start);
+                            mdEnd = parseInt(end);
+                            break;
+                        }
                     }
+                    node = node.parentNode;
+                }
+
+                // フォールバック: 選択テキストで検索（data属性が見つからない場合）
+                if (mdStart === null) {
+                    const selectedText = selection.toString().trim();
+                    if (selectedText) {
+                        const index = mainText.indexOf(selectedText);
+                        if (index !== -1) {
+                            mdStart = index;
+                            mdEnd = index + selectedText.length;
+                        }
+                    }
+                }
+
+                if (mdStart !== null && mdEnd !== null) {
+                    // スクロール位置を計算
+                    const textBeforeSelection = mainText.substring(0, mdStart);
+                    const linesBeforeSelection = textBeforeSelection.split('\n').length - 1;
+                    const approximateScrollPosition = Math.max(0, linesBeforeSelection * 24 - 100);
+
+                    setEditorScrollPosition(approximateScrollPosition);
+                    setEditorSelection({ start: mdStart, end: mdEnd, text: mainText.substring(mdStart, mdEnd) });
                 }
 
                 setAppMode('setup');
