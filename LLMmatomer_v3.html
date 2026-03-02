@@ -530,6 +530,20 @@
             );
         };
 
+        // --- コンポーネント: スクロール位置をリセットするパネルコンテナ ---
+        const ScrollablePane = ({ paneId, className, children, ...props }) => {
+            const ref = useRef(null);
+
+            useEffect(() => {
+                if (ref.current) {
+                    // パネルが表示されるたびにスクロール位置をリセット
+                    ref.current.scrollTop = 0;
+                }
+            }, [paneId]);
+
+            return <div ref={ref} className={className} {...props}>{children}</div>;
+        };
+
         // --- コンポーネント: 注釈ツリービュー ---
         const AnnotationTreeView = ({ annotations, onNodeClick, openPaneIds }) => {
             const [hoveredId, setHoveredId] = useState(null);
@@ -1268,7 +1282,8 @@
                                         <i className="ph-bold ph-pencil-simple"></i> 原文を編集
                                     </button>
                                 </div>
-                                <div
+                                <ScrollablePane
+                                    paneId={pane.id}
                                     className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth selection:bg-blue-200 relative"
                                     onMouseUp={(e) => handleMouseUp(e, index, 'main')}
                                     onScroll={handleScroll}
@@ -1286,7 +1301,7 @@
                                             activeAnnotationId={activeAnnoId}
                                         />
                                     </div>
-                                </div>
+                                </ScrollablePane>
                             </div>
                         );
                     }
@@ -1318,7 +1333,8 @@
                                     </div>
                                 </div>
 
-                                <div
+                                <ScrollablePane
+                                    paneId={pane.id}
                                     className="flex-1 overflow-y-auto p-6 md:p-10 relative selection:bg-blue-200"
                                     onMouseUp={(e) => handleMouseUp(e, index, anno.id)}
                                     onScroll={handleScroll}
@@ -1337,7 +1353,7 @@
                                             activeAnnotationId={activeAnnoId}
                                         />
                                     </div>
-                                </div>
+                                </ScrollablePane>
                             </div>
                         );
                     }
