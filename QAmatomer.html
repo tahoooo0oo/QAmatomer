@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q&Aツリー - 多重構造まとめツール</title>
+
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <!-- Marked (Markdown Parser) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- KaTeX (Math Rendering) -->
+    <link href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+
+    <style>
+        /* カスタムアニメーション */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-up {
+            animation: fadeInUp 0.3s ease-out forwards;
+        }
+
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(30px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .animate-slide-in-right {
+            animation: slideInRight 0.3s ease-out forwards;
+        }
+
+        /* 横スクロールコンテナとスクロールバー */
+        .horizontal-scroll-container {
+            display: flex;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            overflow-y: hidden;
+            width: 100%;
+            height: 100%;
+        }
+        .horizontal-scroll-container::-webkit-scrollbar { height: 10px; }
+        .horizontal-scroll-container::-webkit-scrollbar-track { background: #f1f5f9; }
+        .horizontal-scroll-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 5px; }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Markdown 表示用スタイル */
+        .markdown-body { color: #334155; font-size: 0.95rem; line-height: 1.8; }
+        .markdown-body h1 { font-size: 1.5rem; font-weight: 700; margin-top: 1.5em; margin-bottom: 0.75em; color: #0f172a; }
+        .markdown-body h2 { font-size: 1.25rem; font-weight: 700; margin-top: 1.5em; margin-bottom: 0.75em; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.3em; }
+        .markdown-body h3 { font-size: 1.125rem; font-weight: 600; margin-top: 1.25em; margin-bottom: 0.5em; color: #334155; }
+        .markdown-body p { margin-bottom: 1.2em; }
+        .markdown-body p:last-child { margin-bottom: 0; }
+        .markdown-body a { color: #2563eb; text-decoration: underline; }
+        .markdown-body ul { list-style-type: disc; padding-left: 1.5em; margin-bottom: 1.2em; }
+        .markdown-body ol { list-style-type: decimal; padding-left: 1.5em; margin-bottom: 1.2em; }
+        .markdown-body li { margin-bottom: 0.3em; }
+        .markdown-body blockquote { border-left: 4px solid #cbd5e1; padding-left: 1em; color: #64748b; font-style: italic; margin-bottom: 1.2em; background: #f8fafc; padding: 0.5em 1em; border-radius: 0 0.5rem 0.5rem 0; }
+        .markdown-body code { background-color: #f1f5f9; color: #ef4444; padding: 0.2em 0.4em; border-radius: 0.25rem; font-size: 0.875em; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+        .markdown-body pre { background-color: #1e293b; color: #f8fafc; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin-bottom: 1.2em; }
+        .markdown-body pre code { background-color: transparent; color: inherit; padding: 0; font-size: 0.875em; }
+        .markdown-body table { width: 100%; border-collapse: collapse; margin-bottom: 1.2em; }
+        .markdown-body th, .markdown-body td { border: 1px solid #e2e8f0; padding: 0.5rem; text-align: left; }
+        .markdown-body th { background-color: #f8fafc; font-weight: 600; }
+
+        /* KaTeX 表示調整 */
+        .katex-display { margin: 1em 0; overflow-x: auto; overflow-y: hidden; padding-bottom: 0.2em; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const generateId = () => Math.random().toString(36).substr(2, 9);
+
+        // --- LocalStorage ヘルパー ---
+        const Storage = {
+            getProjectList() {
+                try {
+                    return JSON.parse(localStorage.getItem('annotator-qa-project-list') || '[]');
+                } catch(e) { return []; }
+            },
+            saveProjectList(list) {
+                localStorage.setItem('annotator-qa-project-list', JSON.stringify(list));
+            },
+            getProjectData(id) {
+                try {
+                    return JSON.parse(localStorage.getItem('annotator-qa-project-' + id) || 'null');
+                } catch(e) { return null; }
+            },
+            saveProjectData(id, data) {
+                localStorage.setItem('annotator-qa-project-' + id, JSON.stringify(data));
+            },
+            deleteProjectData(id) {
+                localStorage.removeItem('annotator-qa-project-' + id);
+            }
+        };
+
+        // --- コンポーネント: Markdown & KaTeX ビュワー ---
+        const MarkdownViewer = ({ content, className = "markdown-body" }) => {
+            const contentRef = useRef(null);
+
+            useEffect(() => {
+                if (contentRef.current && content) {
+                    const mathBlocks = [];
+                    let processedText = content;
+
+                    processedText = processedText.replace(/\$\$([\s\S]+?)\$\$/g, (match, p1) => {
+                        const id = `MATHBLOCK${mathBlocks.length}END`;
+                        mathBlocks.push({ id, content: `$$${p1}$$` });
+                        return id;
+                    });
+                    processedText = processedText.replace(/\\\[([\s\S]+?)\\\]/g, (match, p1) => {
+                        const id = `MATHBLOCK${mathBlocks.length}END`;
+                        mathBlocks.push({ id, content: `\\[${p1}\\]` });
+                        return id;
+                    });
+                    processedText = processedText.replace(/\$((?:\\.|[^$\n])+?)\$/g, (match, p1) => {
+                        const id = `MATHINLINE${mathBlocks.length}END`;
+                        mathBlocks.push({ id, content: `$${p1}$` });
+                        return id;
+                    });
+                    processedText = processedText.replace(/\\\(([\s\S]+?)\\\)/g, (match, p1) => {
+                        const id = `MATHINLINE${mathBlocks.length}END`;
+                        mathBlocks.push({ id, content: `\\(${p1}\\)` });
+                        return id;
+                    });
+
+                    let html = marked.parse(processedText);
+
+                    mathBlocks.forEach(block => {
+                        html = html.replace(block.id, block.content);
+                    });
+
+                    contentRef.current.innerHTML = html;
+
+                    try {
+                        renderMathInElement(contentRef.current, {
+                            delimiters: [
+                                {left: '$$', right: '$$', display: true},
+                                {left: '$', right: '$', display: false},
+                                {left: '\\(', right: '\\)', display: false},
+                                {left: '\\[', right: '\\]', display: true}
+                            ],
+                            throwOnError: false
+                        });
+                    } catch (e) {
+                        console.error("KaTeX rendering error:", e);
+                    }
+                } else if (contentRef.current) {
+                    contentRef.current.innerHTML = '';
+                }
+            }, [content]);
+
+            // コピー時にKaTeX数式を元のLaTeX形式で保持するハンドラ
+            useEffect(() => {
+                const el = contentRef.current;
+                if (!el) return;
+
+                const handleCopy = (e) => {
+                    const selection = window.getSelection();
+                    if (!selection.rangeCount) return;
+
+                    const range = selection.getRangeAt(0);
+                    const fragment = range.cloneContents();
+                    const tempDiv = document.createElement('div');
+                    tempDiv.appendChild(fragment);
+
+                    if (!tempDiv.querySelector('.katex')) return;
+
+                    tempDiv.querySelectorAll('.katex-display').forEach(katexEl => {
+                        const annotation = katexEl.querySelector('annotation[encoding="application/x-tex"]');
+                        if (annotation) katexEl.replaceWith(`\n$$${annotation.textContent.trim()}$$\n`);
+                    });
+
+                    tempDiv.querySelectorAll('.katex').forEach(katexEl => {
+                        const annotation = katexEl.querySelector('annotation[encoding="application/x-tex"]');
+                        if (annotation) katexEl.replaceWith(`$${annotation.textContent.trim()}$`);
+                    });
+
+                    const plainText = tempDiv.textContent;
+                    e.preventDefault();
+                    e.clipboardData.setData('text/plain', plainText);
+                };
+
+                el.addEventListener('copy', handleCopy);
+                return () => el.removeEventListener('copy', handleCopy);
+            }, []);
+
+            return <div ref={contentRef} className={className}></div>;
+        };
+
+        // --- コンポーネント: ホーム画面（プロジェクト一覧） ---
+        const HomeScreen = ({ projects, onOpen, onCreateNew, onDelete, onExportSingle, onExportAll, onImport }) => {
+            const fileInputRef = useRef(null);
+
+            const handleFileChange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        onImport(data);
+                    } catch(err) {
+                        alert('ファイルの読み込みに失敗しました。正しいJSONファイルを選択してください。');
+                    }
+                };
+                reader.readAsText(file);
+                e.target.value = '';
+            };
+
+            return (
+                <div className="flex-1 overflow-y-auto bg-gray-50">
+                    <div className="max-w-4xl mx-auto px-6 py-10 animate-fade-in-up">
+                        <div className="flex items-center justify-between mb-8">
+                            <div>
+                                <h2 className="text-2xl font-bold text-gray-800">保存済みのQ&Aツリー</h2>
+                                <p className="text-gray-500 text-sm mt-1">{projects.length} 件のまとめ</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors"
+                                >
+                                    <i className="ph-bold ph-upload-simple"></i> インポート
+                                </button>
+                                <input ref={fileInputRef} type="file" accept=".json" onChange={handleFileChange} className="hidden" />
+                                {projects.length > 0 && (
+                                    <button
+                                        onClick={onExportAll}
+                                        className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors"
+                                    >
+                                        <i className="ph-bold ph-download-simple"></i> 全てエクスポート
+                                    </button>
+                                )}
+                                <button
+                                    onClick={onCreateNew}
+                                    className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center gap-2 transition-colors shadow-sm"
+                                >
+                                    <i className="ph-bold ph-plus"></i> 新規作成
+                                </button>
+                            </div>
+                        </div>
+
+                        {projects.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                                <div className="w-24 h-24 bg-blue-100 text-blue-300 rounded-full flex items-center justify-center mb-6 shadow-inner">
+                                    <i className="ph-fill ph-tree-structure text-5xl"></i>
+                                </div>
+                                <h3 className="text-xl font-bold text-gray-400 mb-2">まだまとめがありません</h3>
+                                <p className="text-sm text-gray-400 max-w-sm text-center leading-relaxed">
+                                    「新規作成」ボタンから大元のテーマを作成し、質問と回答を無限に掘り下げていくツリーを作りましょう。
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="grid gap-4">
+                                {projects.map(project => (
+                                    <div
+                                        key={project.id}
+                                        onClick={() => onOpen(project.id)}
+                                        className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group"
+                                    >
+                                        <div className="p-5 flex items-start justify-between">
+                                            <div className="flex-1 min-w-0">
+                                                <h3 className="font-bold text-gray-800 text-lg truncate group-hover:text-blue-600 transition-colors">
+                                                    {project.name}
+                                                </h3>
+                                                <div className="flex items-center gap-4 mt-2 text-sm text-gray-400">
+                                                    <span className="flex items-center gap-1">
+                                                        <i className="ph ph-calendar-blank"></i>
+                                                        {new Date(project.createdAt).toLocaleDateString('ja-JP')}
+                                                    </span>
+                                                    <span className="flex items-center gap-1">
+                                                        <i className="ph ph-clock"></i>
+                                                        {new Date(project.updatedAt).toLocaleDateString('ja-JP')} 更新
+                                                    </span>
+                                                    <span className="flex items-center gap-1">
+                                                        <i className="ph ph-list-dashes"></i>
+                                                        {project.nodeCount || 0} 個のノード
+                                                    </span>
+                                                </div>
+                                                {project.preview && (
+                                                    <p className="mt-3 text-sm text-gray-500 line-clamp-2 leading-relaxed">{project.preview}</p>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center gap-1 ml-4 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); onExportSingle(project.id); }}
+                                                    className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors"
+                                                    title="エクスポート"
+                                                >
+                                                    <i className="ph ph-download-simple text-lg"></i>
+                                                </button>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if(confirm('\u300c' + project.name + '\u300d\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f\u3053\u306e\u64cd\u4f5c\u306f\u5143\u306b\u623b\u305b\u307e\u305b\u3093\u3002')) onDelete(project.id);
+                                                    }}
+                                                    className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors"
+                                                    title="削除"
+                                                >
+                                                    <i className="ph ph-trash text-lg"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- コンポーネント: プロジェクト作成・ルート編集画面 ---
+        const SetupScreen = ({ initialName, isNew, onSave, onCancel }) => {
+            const [name, setName] = useState(initialName || '');
+
+            return (
+                <div className="flex flex-col items-center justify-center h-[calc(100vh-56px)] bg-gray-50 p-6">
+                    <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col animate-fade-in-up">
+                        <div className="p-8">
+                            <h1 className="text-2xl font-bold text-gray-800 mb-2">{isNew ? '新しいまとめツリーを作成' : 'まとめのタイトルを編集'}</h1>
+                            <p className="text-gray-500 text-sm mb-6">このツリー全体の主題（タイトル）を設定します。</p>
+                            
+                            <label className="block text-sm font-bold text-gray-700 mb-2">主題・タイトル <span className="text-red-500">*</span></label>
+                            <input
+                                type="text"
+                                value={name}
+                                onChange={e => setName(e.target.value)}
+                                className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white text-lg font-bold"
+                                placeholder="例：React Hooks の仕組みについて"
+                                autoFocus
+                            />
+                        </div>
+                        <div className="bg-gray-50 px-8 py-5 border-t border-gray-100 flex justify-end gap-3">
+                            {onCancel && (
+                                <button onClick={onCancel} className="px-5 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg font-bold hover:bg-gray-50 transition-colors">
+                                    キャンセル
+                                </button>
+                            )}
+                            <button
+                                onClick={() => onSave(name)}
+                                disabled={!name.trim()}
+                                className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm flex items-center gap-2"
+                            >
+                                <i className="ph-bold ph-check"></i> {isNew ? '作成して進む' : '保存'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- パンくずリスト ---
+        const BreadcrumbTrail = ({ path }) => {
+            return (
+                <div className="flex items-center flex-wrap gap-1 text-xs px-4 py-2 bg-slate-100 border-b border-gray-200 text-gray-500 shrink-0">
+                    <i className="ph-fill ph-folder-open text-blue-400 mr-1"></i>
+                    {path.map((item, idx) => (
+                        <React.Fragment key={idx}>
+                            {idx > 0 && <span className="text-gray-400 mx-1">›</span>}
+                            <span 
+                                className={`max-w-[120px] md:max-w-[200px] truncate ${item.isLast ? 'font-bold text-gray-800' : 'text-gray-500'}`}
+                                title={item.title}
+                            >
+                                {item.title}
+                            </span>
+                        </React.Fragment>
+                    ))}
+                </div>
+            );
+        };
+
+        // --- View Pane ---
+        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, onEdit, onDelete, onClose, onAddChild, onOpenChild }) => {
+            return (
+                <div className={`flex flex-col h-full bg-white border-r border-gray-200 shrink-0 w-[90vw] md:w-[50vw] lg:w-[45vw] xl:w-[40vw] relative z-0 shadow-[4px_0_24px_rgba(0,0,0,0.06)] animate-slide-in-right ${isRoot ? 'bg-slate-50' : ''}`}>
+                    {breadcrumb.length > 0 && <BreadcrumbTrail path={breadcrumb} />}
+                    
+                    <div className="p-4 border-b border-gray-100 bg-white flex items-start justify-between shrink-0 shadow-sm z-10">
+                        <div className="flex items-start gap-3 overflow-hidden flex-1">
+                            <i className={`ph-fill ${isRoot ? 'ph-folders text-indigo-500' : 'ph-question text-blue-500'} text-2xl shrink-0 mt-0.5`}></i>
+                            <h2 className={`font-bold text-gray-800 leading-snug ${isRoot ? 'text-xl' : 'text-lg'}`}>{node.question}</h2>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0 ml-4">
+                            <button onClick={onEdit} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="編集">
+                                <i className="ph ph-pencil-simple text-lg"></i>
+                            </button>
+                            {!isRoot && (
+                                <button onClick={onDelete} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除">
+                                    <i className="ph ph-trash text-lg"></i>
+                                </button>
+                            )}
+                            {!isRoot && <div className="w-px h-5 bg-gray-300 mx-1"></div>}
+                            {!isRoot && (
+                                <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors" title="閉じる">
+                                    <i className="ph-bold ph-x text-lg"></i>
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto flex flex-col">
+                        {!isRoot && node.answer && (
+                            <div className="p-6 md:p-8 border-b border-gray-100 bg-white shrink-0">
+                                <div className="text-xs text-green-600 font-bold mb-3 flex items-center gap-1 uppercase tracking-wider">
+                                    <i className="ph-fill ph-check-circle text-sm"></i> 回答・解説
+                                </div>
+                                <MarkdownViewer content={node.answer} />
+                            </div>
+                        )}
+                        
+                        <div className={`p-6 md:p-8 flex-1 min-h-[50%] ${isRoot ? 'bg-transparent' : 'bg-gray-50'}`}>
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="text-xs text-gray-500 font-bold flex items-center gap-1 uppercase tracking-wider">
+                                    <i className={`ph-bold ${isRoot ? 'ph-list-bullets' : 'ph-list-dashes'} text-sm`}></i> 
+                                    {isRoot ? `質問一覧 (${node.children.length})` : `派生する質問 (${node.children.length})`}
+                                </div>
+                                <button 
+                                    onClick={onAddChild}
+                                    className="px-3 py-1.5 bg-white border border-gray-200 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-50 hover:border-blue-300 transition-colors flex items-center gap-1 shadow-sm"
+                                >
+                                    <i className="ph-bold ph-plus"></i> 質問を追加
+                                </button>
+                            </div>
+                            
+                            <div className="space-y-3 pb-20">
+                                {node.children.length === 0 ? (
+                                    <div className="text-center py-12 opacity-60 bg-white rounded-xl border border-dashed border-gray-300 h-48 flex flex-col items-center justify-center">
+                                        <i className={`ph-fill ${isRoot ? 'ph-list-plus' : 'ph-tree-structure'} text-4xl text-gray-300 mb-3`}></i>
+                                        <p className="text-sm text-gray-500 font-medium">{isRoot ? 'まだ質問がありません。' : 'この項目に対する疑問や、'}</p>
+                                        <p className="text-sm text-gray-500 font-medium">{isRoot ? '最初の質問を追加しましょう。' : 'さらに深掘りしたい質問を追加しましょう。'}</p>
+                                    </div>
+                                ) : (
+                                    node.children.map(childNode => {
+                                        if (!childNode) return null;
+                                        const isChildSelected = selectedChildId === childNode.id;
+                                        return (
+                                            <div 
+                                                key={childNode.id}
+                                                onClick={() => onOpenChild(childNode.id)}
+                                                className={`p-4 rounded-xl border transition-all cursor-pointer group ${isChildSelected ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-sm' : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-md'}`}
+                                            >
+                                                <div className="font-bold text-gray-800 flex items-start gap-2.5">
+                                                    <i className={`ph-fill ph-question mt-0.5 shrink-0 ${isChildSelected ? 'text-blue-600' : 'text-gray-300 group-hover:text-blue-400 transition-colors'}`}></i>
+                                                    <span className="leading-relaxed">{childNode.question}</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Edit / Add Pane ---
+        const EditPane = ({ mode, isTopLevel, initialQuestion, initialAnswer, breadcrumb, onSave, onCancel }) => {
+            const isAdd = mode === 'add';
+            const [question, setQuestion] = useState(initialQuestion || '');
+            const [answer, setAnswer] = useState(initialAnswer || '');
+
+            return (
+                <div className="flex flex-col h-full bg-slate-50 border-r border-gray-200 shrink-0 w-[90vw] md:w-[50vw] lg:w-[45vw] xl:w-[40vw] relative z-0 shadow-[4px_0_24px_rgba(0,0,0,0.06)] animate-slide-in-right">
+                    {breadcrumb.length > 0 && <BreadcrumbTrail path={breadcrumb} />}
+
+                    <div className="p-4 border-b border-gray-200 bg-white flex items-center justify-between shrink-0 shadow-sm z-10">
+                        <div className="flex items-center gap-2">
+                            <i className={`ph-fill ${isAdd ? 'ph-plus-circle text-blue-500' : 'ph-pencil-simple text-orange-500'} text-xl`}></i>
+                            <h3 className="font-bold text-gray-700">{isAdd ? (isTopLevel ? '新しい質問を追加' : '深掘り質問の追加') : '質問と回答の編集'}</h3>
+                        </div>
+                        <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 transition-colors">
+                            <i className="ph-bold ph-x text-lg"></i>
+                        </button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+                        <div>
+                            <label className="block text-sm font-bold text-gray-600 mb-2 flex items-center gap-1">
+                                <i className="ph-fill ph-question text-blue-500"></i> 質問 <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="text"
+                                value={question}
+                                onChange={e => setQuestion(e.target.value)}
+                                className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white shadow-sm font-bold text-gray-800"
+                                placeholder={isTopLevel ? "例：React Hooksとは何ですか？" : "例：なぜその技術が必要なのですか？"}
+                            />
+                        </div>
+                        <div className="flex-1 flex flex-col min-h-[300px]">
+                            <label className="block text-sm font-bold text-gray-600 mb-2 flex justify-between items-end">
+                                <span className="flex items-center gap-1"><i className="ph-fill ph-check-circle text-green-500"></i> 回答・解説</span>
+                                <span className="text-xs text-gray-400 font-normal px-2 py-0.5 bg-gray-200 rounded">Markdown & LaTeX対応</span>
+                            </label>
+                            <textarea
+                                value={answer}
+                                onChange={e => setAnswer(e.target.value)}
+                                className="flex-1 w-full border border-gray-300 rounded-lg p-4 focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all resize-none font-mono text-sm bg-white shadow-sm text-gray-700 leading-relaxed"
+                                placeholder="回答をマークダウン形式で記述します..."
+                            ></textarea>
+                        </div>
+                    </div>
+                    
+                    <div className="p-4 border-t border-gray-200 bg-white flex justify-end gap-3 shrink-0">
+                        <button onClick={onCancel} className="px-6 py-2.5 rounded-lg font-bold text-gray-600 hover:bg-gray-100 transition-colors">
+                            キャンセル
+                        </button>
+                        <button
+                            onClick={() => onSave(question, answer)}
+                            disabled={!question.trim()}
+                            className="px-6 py-2.5 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-sm"
+                        >
+                            <i className="ph-bold ph-check"></i> 保存
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- メインアプリコンポーネント ---
+        const App = () => {
+            // appMode: 'home' | 'setup' | 'workspace'
+            const [appMode, setAppMode] = useState('home');
+            const [projectList, setProjectList] = useState([]);
+            
+            const [currentProjectId, setCurrentProjectId] = useState(null);
+            const [currentProjectName, setCurrentProjectName] = useState('');
+            // nodes: { [nodeId]: { id, parentId, question, answer, children: [id, id...] } }
+            const [nodes, setNodes] = useState({});
+            
+            // panes: [{ type: 'view'|'add'|'edit', nodeId?, parentId? }]
+            const [panes, setPanes] = useState([]);
+
+            const scrollContainerRef = useRef(null);
+
+            // 初期化
+            useEffect(() => {
+                setProjectList(Storage.getProjectList());
+            }, []);
+
+            // 自動保存
+            useEffect(() => {
+                if (!currentProjectId || !nodes['root']) return;
+
+                Storage.saveProjectData(currentProjectId, { nodes });
+
+                setProjectList(prev => {
+                    const updated = prev.map(p => p.id === currentProjectId ? {
+                        ...p,
+                        name: currentProjectName,
+                        updatedAt: Date.now(),
+                        nodeCount: Object.keys(nodes).length,
+                        preview: nodes['root'].answer.substring(0, 100)
+                    } : p);
+                    Storage.saveProjectList(updated);
+                    return updated;
+                });
+            }, [nodes, currentProjectName, currentProjectId]);
+
+            // カラムが増えたら右端へスムーズにスクロール
+            useEffect(() => {
+                if (scrollContainerRef.current) {
+                    scrollContainerRef.current.scrollTo({
+                        left: scrollContainerRef.current.scrollWidth,
+                        behavior: 'smooth'
+                    });
+                }
+            }, [panes.length]);
+
+            // --- プロジェクト管理 ---
+            const openProject = (id) => {
+                const data = Storage.getProjectData(id);
+                const meta = projectList.find(p => p.id === id);
+                if (data && meta && data.nodes && data.nodes['root']) {
+                    setCurrentProjectId(id);
+                    setCurrentProjectName(meta.name);
+                    setNodes(data.nodes);
+                    setAppMode('workspace');
+                    setPanes([{ type: 'view', nodeId: 'root' }]);
+                }
+            };
+
+            const createNewProject = () => {
+                setCurrentProjectId(null);
+                setCurrentProjectName('');
+                setNodes({});
+                setAppMode('setup');
+            };
+
+            const deleteProject = (id) => {
+                Storage.deleteProjectData(id);
+                setProjectList(prev => {
+                    const updated = prev.filter(p => p.id !== id);
+                    Storage.saveProjectList(updated);
+                    return updated;
+                });
+            };
+
+            const goHome = () => {
+                setAppMode('home');
+                setCurrentProjectId(null);
+                setCurrentProjectName('');
+                setNodes({});
+                setPanes([]);
+            };
+
+            // --- ノード操作 ---
+            const handleSetupSave = (name) => {
+                let id = currentProjectId;
+                const now = Date.now();
+                
+                let newNodes = { ...nodes };
+
+                if (!id) {
+                    id = generateId();
+                    const newProject = {
+                        id, name, createdAt: now, updatedAt: now, nodeCount: 1, preview: '質問一覧から展開して確認してください。'
+                    };
+                    setProjectList(prev => {
+                        const updated = [newProject, ...prev];
+                        Storage.saveProjectList(updated);
+                        return updated;
+                    });
+                    newNodes = {
+                        root: { id: 'root', parentId: null, question: name, answer: '', children: [] }
+                    };
+                } else {
+                    newNodes['root'] = { ...newNodes['root'], question: name };
+                }
+
+                setCurrentProjectId(id);
+                setCurrentProjectName(name);
+                setNodes(newNodes);
+                Storage.saveProjectData(id, { nodes: newNodes });
+                
+                setAppMode('workspace');
+                
+                // 現在すでにパンくず・ペインがある場合は維持し、ルートノードだけ更新を反映する
+                if (panes.length === 0) {
+                    setPanes([{ type: 'view', nodeId: 'root' }]);
+                }
+            };
+
+            const deleteNodeRecursive = (nodeId, nodesObj) => {
+                const node = nodesObj[nodeId];
+                if (!node) return;
+                node.children.forEach(childId => deleteNodeRecursive(childId, nodesObj));
+                delete nodesObj[nodeId];
+            };
+
+            const handleSaveNode = (paneIndex, type, idOrParentId, question, answer) => {
+                if (type === 'add') {
+                    const newNodeId = generateId();
+                    const parentId = idOrParentId;
+                    
+                    setNodes(prev => {
+                        const next = { ...prev };
+                        next[newNodeId] = { id: newNodeId, parentId, question, answer, children: [] };
+                        next[parentId] = {
+                            ...next[parentId],
+                            children: [...next[parentId].children, newNodeId]
+                        };
+                        return next;
+                    });
+                    
+                    setPanes(prev => {
+                        const next = [...prev];
+                        next[paneIndex] = { type: 'view', nodeId: newNodeId };
+                        return next;
+                    });
+                } else {
+                    const nodeId = idOrParentId;
+                    if (nodeId === 'root') setCurrentProjectName(question);
+                    
+                    setNodes(prev => ({
+                        ...prev,
+                        [nodeId]: { ...prev[nodeId], question, answer }
+                    }));
+                    
+                    setPanes(prev => {
+                        const next = [...prev];
+                        next[paneIndex] = { type: 'view', nodeId };
+                        return next;
+                    });
+                }
+            };
+
+            const handleDeleteNode = (paneIndex, nodeId, parentId) => {
+                if (nodeId === 'root') return;
+                if (!confirm('この質問と、そこから派生するすべての回答・質問を削除します。よろしいですか？')) return;
+                
+                setNodes(prev => {
+                    const next = { ...prev };
+                    if (parentId && next[parentId]) {
+                        next[parentId] = {
+                            ...next[parentId],
+                            children: next[parentId].children.filter(id => id !== nodeId)
+                        };
+                    }
+                    deleteNodeRecursive(nodeId, next);
+                    return next;
+                });
+                
+                setPanes(prev => prev.slice(0, paneIndex));
+            };
+
+            // --- パンくず生成 ---
+            const buildBreadcrumbPath = (paneIndex) => {
+                const path = [];
+                for (let i = 0; i <= paneIndex; i++) {
+                    const p = panes[i];
+                    let nodeId = p.nodeId || p.parentId;
+                    if (!nodeId && p.type === 'add') nodeId = p.parentId;
+                    
+                    const node = nodes[nodeId];
+                    if (node) {
+                        path.push({
+                            title: node.question,
+                            isLast: i === paneIndex
+                        });
+                    }
+                }
+                return path;
+            };
+
+            // --- エクスポート / インポート ---
+            const doExport = (projectIds) => {
+                const exportData = {
+                    type: 'annotator-qa-export',
+                    version: 1,
+                    exportedAt: Date.now(),
+                    projects: projectIds.map(id => {
+                        const meta = projectList.find(p => p.id === id);
+                        const data = Storage.getProjectData(id);
+                        return {
+                            name: meta?.name || '名前なし',
+                            nodes: data?.nodes || {},
+                            createdAt: meta?.createdAt,
+                            updatedAt: meta?.updatedAt
+                        };
+                    })
+                };
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'qa-tree-export-' + new Date().toISOString().slice(0, 10) + '.json';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
+            const exportAllProjects = () => doExport(projectList.map(p => p.id));
+            const exportSingleProject = (id) => doExport([id]);
+
+            const importProjects = (data) => {
+                if (!data || data.type !== 'annotator-qa-export' || !Array.isArray(data.projects)) {
+                    alert('無効なファイル形式です。このツールからエクスポートしたファイルを選択してください。');
+                    return;
+                }
+                let count = 0;
+                const newList = [...projectList];
+                data.projects.forEach(proj => {
+                    const id = generateId();
+                    const now = Date.now();
+                    newList.unshift({
+                        id,
+                        name: proj.name || '名前なし',
+                        createdAt: proj.createdAt || now,
+                        updatedAt: proj.updatedAt || now,
+                        nodeCount: Object.keys(proj.nodes || {}).length,
+                        preview: proj.nodes?.root?.answer?.substring(0, 100) || ''
+                    });
+                    Storage.saveProjectData(id, { nodes: proj.nodes || {} });
+                    count++;
+                });
+                Storage.saveProjectList(newList);
+                setProjectList(newList);
+                alert(count + ' 件のまとめをインポートしました。');
+            };
+
+            // --- レンダリング ---
+            return (
+                <div className="flex flex-col h-screen w-full bg-gray-50 overflow-hidden font-sans text-gray-900">
+                    <header className="h-14 bg-slate-900 text-white flex items-center px-6 shrink-0 z-30 shadow-md">
+                        <div className="flex items-center gap-3">
+                            <div
+                                className="bg-blue-500 p-1.5 rounded text-white flex items-center justify-center shadow-lg shadow-blue-500/30 cursor-pointer hover:bg-blue-400 transition-colors"
+                                onClick={goHome}
+                                title="ホームに戻る"
+                            >
+                                <i className="ph-bold ph-tree-structure text-xl"></i>
+                            </div>
+                            <h1 className="font-bold text-lg tracking-wide cursor-pointer hover:text-blue-300 transition-colors" onClick={goHome}>
+                                Q&Aツリー
+                                <span className="hidden sm:inline-block text-slate-400 font-normal text-sm ml-2">| 多重構造まとめツール</span>
+                            </h1>
+                            {appMode !== 'home' && currentProjectName && (
+                                <div className="hidden sm:flex items-center gap-2 ml-4">
+                                    <i className="ph ph-caret-right text-slate-600 text-sm"></i>
+                                    <span className="text-slate-300 text-sm font-medium truncate max-w-[300px]">{currentProjectName}</span>
+                                </div>
+                            )}
+                        </div>
+                        <div className="ml-auto flex items-center gap-4">
+                            {appMode !== 'home' && (
+                                <button onClick={goHome} className="text-slate-400 hover:text-white text-sm flex items-center gap-1.5 transition-colors font-medium">
+                                    <i className="ph-bold ph-house"></i> ホーム
+                                </button>
+                            )}
+                        </div>
+                    </header>
+
+                    {appMode === 'home' && (
+                        <HomeScreen
+                            projects={projectList}
+                            onOpen={openProject}
+                            onCreateNew={createNewProject}
+                            onDelete={deleteProject}
+                            onExportSingle={exportSingleProject}
+                            onExportAll={exportAllProjects}
+                            onImport={importProjects}
+                        />
+                    )}
+
+                    {appMode === 'setup' && (
+                        <SetupScreen
+                            initialName={currentProjectName}
+                            isNew={!currentProjectId}
+                            onSave={handleSetupSave}
+                            onCancel={currentProjectId ? () => {
+                                setAppMode('workspace');
+                                if (panes.length === 0) setPanes([{ type: 'view', nodeId: 'root' }]);
+                            } : (projectList.length > 0 ? goHome : null)}
+                        />
+                    )}
+
+                    {appMode === 'workspace' && (
+                        <div className="flex-1 flex overflow-hidden relative bg-gray-200">
+                            <div className="horizontal-scroll-container scroll-smooth" ref={scrollContainerRef}>
+                                {panes.map((pane, index) => {
+                                    const breadcrumb = buildBreadcrumbPath(index);
+
+                                    if (pane.type === 'view') {
+                                        const node = nodes[pane.nodeId];
+                                        // 整合性のため、ノードがない場合は何も表示しない（通常起きない）
+                                        if (!node) return null;
+                                        
+                                        // 子ノードのオブジェクト配列を作成し、削除されたIDを除外する
+                                        const validChildren = node.children.map(id => nodes[id]).filter(Boolean);
+                                        const nodeWithValidChildren = { ...node, children: validChildren };
+
+                                        const nextPane = panes[index + 1];
+                                        const selectedChildId = nextPane ? (nextPane.nodeId || nextPane.parentId) : null;
+
+                                        return (
+                                            <ViewPane
+                                                key={`pane-${index}-${pane.nodeId}`}
+                                                node={nodeWithValidChildren}
+                                                isRoot={pane.nodeId === 'root'}
+                                                breadcrumb={breadcrumb}
+                                                isActive={index === panes.length - 1}
+                                                selectedChildId={selectedChildId}
+                                                onEdit={() => {
+                                                    if (pane.nodeId === 'root') {
+                                                        setAppMode('setup');
+                                                    } else {
+                                                        setPanes(prev => { const n = [...prev]; n[index] = { type: 'edit', nodeId: pane.nodeId }; return n; });
+                                                    }
+                                                }}
+                                                onDelete={() => handleDeleteNode(index, pane.nodeId, node.parentId)}
+                                                onClose={() => setPanes(prev => prev.slice(0, index))}
+                                                onAddChild={() => {
+                                                    setPanes(prev => {
+                                                        const next = prev.slice(0, index + 1);
+                                                        next.push({ type: 'add', parentId: pane.nodeId });
+                                                        return next;
+                                                    });
+                                                }}
+                                                onOpenChild={(childId) => {
+                                                    setPanes(prev => {
+                                                        const next = prev.slice(0, index + 1);
+                                                        next.push({ type: 'view', nodeId: childId });
+                                                        return next;
+                                                    });
+                                                }}
+                                            />
+                                        );
+                                    }
+
+                                    if (pane.type === 'add' || pane.type === 'edit') {
+                                        const isAdd = pane.type === 'add';
+                                        const node = isAdd ? null : nodes[pane.nodeId];
+                                        const isTopLevel = isAdd ? pane.parentId === 'root' : false;
+                                        
+                                        return (
+                                            <EditPane
+                                                key={`pane-${index}-${pane.type}`}
+                                                mode={pane.type}
+                                                isTopLevel={isTopLevel}
+                                                initialQuestion={node?.question || ''}
+                                                initialAnswer={node?.answer || ''}
+                                                breadcrumb={breadcrumb}
+                                                onSave={(q, a) => handleSaveNode(index, pane.type, isAdd ? pane.parentId : pane.nodeId, q, a)}
+                                                onCancel={() => {
+                                                    if (isAdd) {
+                                                        setPanes(prev => prev.slice(0, index));
+                                                    } else {
+                                                        setPanes(prev => { const n = [...prev]; n[index] = { type: 'view', nodeId: pane.nodeId }; return n; });
+                                                    }
+                                                }}
+                                            />
+                                        );
+                                    }
+                                    return null;
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
