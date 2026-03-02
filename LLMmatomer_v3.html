@@ -543,10 +543,18 @@
                     setTimeout(() => {
                         textarea.focus();
                         textarea.setSelectionRange(editorPosition, editorPosition);
-                        // カーソル位置に自動スクロール
-                        const scrollTop = Math.max(0, (editorPosition / text.length) * textarea.scrollHeight - 100);
-                        textarea.scrollTop = scrollTop;
-                    }, 0);
+
+                        // カーソル位置に自動スクロール（改行数で計算）
+                        const textBeforePosition = text.substring(0, editorPosition);
+                        const lineCount = (textBeforePosition.match(/\n/g) || []).length;
+
+                        // 行高をコンピュートするか、推定値を使用
+                        const computedStyle = window.getComputedStyle(textarea);
+                        const lineHeight = parseFloat(computedStyle.lineHeight);
+                        const estimatedScrollTop = Math.max(0, lineCount * lineHeight - textarea.clientHeight / 2);
+
+                        textarea.scrollTop = estimatedScrollTop;
+                    }, 50);
                 }
             }, [editorPosition, text]);
 
