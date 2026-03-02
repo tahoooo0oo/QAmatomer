@@ -171,7 +171,6 @@
                 if (contentRef.current && content) {
                     const mathBlocks = [];
                     let processedText = content;
-                    const mdPositionMap = [];  // Markdown内の位置を追跡
 
                     processedText = processedText.replace(/\$\$([\s\S]+?)\$\$/g, (match, p1) => {
                         const id = `MATHBLOCK${mathBlocks.length}END`;
@@ -197,18 +196,6 @@
                         return id;
                     });
 
-                    // カスタムレンダラーで各テキストにMarkdown内の位置を埋め込む
-                    let charPos = 0;
-                    const renderer = new marked.Renderer();
-                    const originalText = renderer.text.bind(renderer);
-                    renderer.text = function(token) {
-                        const text = token.text;
-                        const startPos = charPos;
-                        charPos += text.length;
-                        return `<span data-md-start="${startPos}" data-md-end="${charPos}" class="md-positioned">${text}</span>`;
-                    };
-
-                    marked.setOptions({ renderer });
                     let html = marked.parse(processedText);
 
                     mathBlocks.forEach(block => {
@@ -965,29 +952,51 @@
                         let mdStart = null;
                         let mdEnd = null;
                         if (targetId === 'main') {
-                            // DOMのdata属性から位置を取得
-                            let node = range.startContainer;
-                            while (node && mdStart === null) {
-                                if (node.nodeType === 1) {
-                                    const start = node.getAttribute('data-md-start');
-                                    const end = node.getAttribute('data-md-end');
-                                    if (start !== null) {
-                                        mdStart = parseInt(start);
-                                        mdEnd = parseInt(end);
-                                        break;
-                                    }
-                                }
-                                node = node.parentNode;
+                            // 選択範囲の前後の文脈を取得
+                            const preRange = range.cloneRange();
+                            preRange.collapse(true);  // 開始位置へ
+                            preRange.setStart(contentRef.current, 0);
+                            const beforeText = preRange.toString();
+
+                            const afterRange = range.cloneRange();
+                            afterRange.collapse(false);  // 終了位置へ
+                            const contentEl = contentRef.current;
+                            if (contentEl.lastChild) {
+                                afterRange.setEnd(contentEl.lastChild, contentEl.lastChild.nodeValue?.length || 0);
                             }
-                            // フォールバック: テキスト検索で位置を計算
-                            if (mdStart === null) {
-                                const selectedText = plainText;
-                                const index = mainText.indexOf(selectedText);
-                                if (index !== -1) {
-                                    mdStart = index;
-                                    mdEnd = index + selectedText.length;
+                            const afterText = afterRange.toString();
+
+                            const selectedText = plainText;
+
+                            // 前後の文脈を含めた複合パターンで検索（重複対策）
+                            const fullPattern = beforeText + selectedText;
+                            let startIndex = -1;
+
+                            // 前のテキストが十分長い場合、それを含めて検索
+                            if (beforeText.length > 10) {
+                                const contextLength = Math.min(20, beforeText.length);
+                                const searchPattern = beforeText.slice(-contextLength) + selectedText;
+                                let foundAt = mainText.lastIndexOf(beforeText.slice(-contextLength));
+                                if (foundAt !== -1) {
+                                    startIndex = foundAt + contextLength;
                                 }
                             }
+
+                            // フォールバック: 単純なテキスト検索
+                            if (startIndex === -1) {
+                                startIndex = mainText.indexOf(selectedText);
+                            }
+
+                            if (startIndex !== -1) {
+                                mdStart = startIndex;
+                                mdEnd = startIndex + selectedText.length;
+                            }
+
+                            // デバッグ情報をログ出力
+                            console.log('=== Selection Debug ===');
+                            console.log('Selected Text:', selectedText);
+                            console.log('Calculated Position:', { mdStart, mdEnd });
+                            console.log('Text at position:', mainText.substring(mdStart, mdEnd));
                         }
 
                         setSelectionMenu({
