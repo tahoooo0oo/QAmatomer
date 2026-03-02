@@ -39,23 +39,17 @@
 
         /* 横スクロールコンテナ */
         .pane-scroll-container {
-            display: flex;
-            flex-wrap: nowrap;
-            overflow-x: auto;
-            overflow-y: hidden;
-            flex: 1;
-            height: 100%;
+            display: flex; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; flex: 1; height: 100%;
         }
         .pane-scroll-container::-webkit-scrollbar { height: 10px; }
         .pane-scroll-container::-webkit-scrollbar-track { background: #f1f5f9; }
         .pane-scroll-container::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 5px; }
-
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        /* Markdown 表示用スタイル */
+        /* Markdown 表示 */
         .markdown-body { color: #334155; font-size: 0.95rem; line-height: 1.8; }
         .markdown-body h1 { font-size: 1.5rem; font-weight: 700; margin-top: 1.5em; margin-bottom: 0.75em; color: #0f172a; }
         .markdown-body h2 { font-size: 1.25rem; font-weight: 700; margin-top: 1.5em; margin-bottom: 0.75em; color: #1e293b; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.3em; }
@@ -73,108 +67,109 @@
         .markdown-body table { width: 100%; border-collapse: collapse; margin-bottom: 1.2em; }
         .markdown-body th, .markdown-body td { border: 1px solid #e2e8f0; padding: 0.5rem; text-align: left; }
         .markdown-body th { background-color: #f8fafc; font-weight: 600; }
-
-        /* KaTeX 表示調整 */
         .katex-display { margin: 1em 0; overflow-x: auto; overflow-y: hidden; padding-bottom: 0.2em; }
 
-        /* 注釈ハイライトのスタイル */
+        /* 注釈ハイライト */
         .annotation-mark {
-            background-color: rgba(253, 224, 71, 0.4);
-            border-bottom: 2px dotted #eab308;
-            color: inherit;
-            cursor: pointer;
-            border-radius: 2px;
-            padding: 2px 0;
-            transition: all 0.2s;
-            position: relative;
-            box-decoration-break: clone;
-            -webkit-box-decoration-break: clone;
+            background-color: rgba(253, 224, 71, 0.4); border-bottom: 2px dotted #eab308;
+            color: inherit; cursor: pointer; border-radius: 2px; padding: 2px 0;
+            transition: all 0.2s; position: relative;
+            box-decoration-break: clone; -webkit-box-decoration-break: clone;
         }
         .annotation-mark:hover { background-color: rgba(253, 224, 71, 0.7); }
-        .annotation-mark.active {
-            background-color: rgba(250, 204, 21, 0.6);
-            border-bottom: 2px solid #ca8a04;
-            box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.3);
-        }
+        .annotation-mark.active { background-color: rgba(250, 204, 21, 0.6); border-bottom: 2px solid #ca8a04; box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.3); }
 
-        /* アウトラインサイドバー */
-        .outline-sidebar {
-            width: 300px;
-            min-width: 300px;
+        /* ドキュメントサイドバー（最左） */
+        .doc-sidebar {
+            width: 220px; min-width: 220px;
+            background: #060a13;
+            color: #94a3b8; overflow-y: auto; overflow-x: hidden;
+        }
+        .doc-sidebar::-webkit-scrollbar { width: 5px; }
+        .doc-sidebar::-webkit-scrollbar-track { background: transparent; }
+        .doc-sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+        .doc-item {
+            padding: 12px 16px; cursor: pointer; transition: all 0.15s ease;
+            border-left: 3px solid transparent;
+        }
+        .doc-item:hover { background: rgba(255,255,255,0.04); border-left-color: rgba(148,163,184,0.3); }
+        .doc-item.active { background: rgba(59,130,246,0.15); border-left-color: #3b82f6; color: #e2e8f0; }
+
+        /* セクションサイドバー（左から2番目） */
+        .section-sidebar {
+            width: 280px; min-width: 280px;
             background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
-            color: #e2e8f0;
-            overflow-y: auto;
-            overflow-x: hidden;
+            color: #e2e8f0; overflow-y: auto; overflow-x: hidden;
         }
-        .outline-sidebar::-webkit-scrollbar { width: 6px; }
-        .outline-sidebar::-webkit-scrollbar-track { background: transparent; }
-        .outline-sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
-
-        .outline-item {
-            padding: 14px 20px;
-            cursor: pointer;
-            transition: all 0.15s ease;
+        .section-sidebar::-webkit-scrollbar { width: 6px; }
+        .section-sidebar::-webkit-scrollbar-track { background: transparent; }
+        .section-sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+        .section-item {
+            padding: 12px 18px; cursor: pointer; transition: all 0.15s ease;
             border-left: 4px solid transparent;
-            position: relative;
         }
-        .outline-item:hover {
-            background: rgba(255,255,255,0.06);
-            border-left-color: rgba(148,163,184,0.4);
-        }
-        .outline-item.active {
-            background: rgba(59,130,246,0.18);
-            border-left-color: #3b82f6;
-            color: #fff;
-        }
+        .section-item:hover { background: rgba(255,255,255,0.06); border-left-color: rgba(148,163,184,0.4); }
+        .section-item.active { background: rgba(59,130,246,0.18); border-left-color: #3b82f6; color: #fff; }
 
         /* 注釈リストバー */
-        .anno-list-bar {
-            border-bottom: 1px solid #e2e8f0;
-            background: linear-gradient(180deg, #f0f7ff 0%, #f8fafc 100%);
-        }
-        .anno-list-item {
-            padding: 8px 16px;
-            cursor: pointer;
-            border-left: 3px solid transparent;
-            transition: all 0.15s ease;
-        }
-        .anno-list-item:hover {
-            background: rgba(59,130,246,0.08);
-        }
-        .anno-list-item.active {
-            background: rgba(59,130,246,0.12);
-            border-left-color: #3b82f6;
-        }
+        .anno-list-bar { border-bottom: 1px solid #e2e8f0; background: linear-gradient(180deg, #f0f7ff 0%, #f8fafc 100%); }
+        .anno-list-item { padding: 8px 16px; cursor: pointer; border-left: 3px solid transparent; transition: all 0.15s ease; }
+        .anno-list-item:hover { background: rgba(59,130,246,0.08); }
+        .anno-list-item.active { background: rgba(59,130,246,0.12); border-left-color: #3b82f6; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef, useMemo, useCallback } = React;
-
+        const { useState, useEffect, useRef, useMemo } = React;
         const generateId = () => Math.random().toString(36).substr(2, 9);
 
-        // 選択範囲からKaTeX数式をLaTeX形式に復元してテキストを取得
         const getQuoteFromSelection = (range) => {
             const fragment = range.cloneContents();
             const tempDiv = document.createElement('div');
             tempDiv.appendChild(fragment);
-            tempDiv.querySelectorAll('.katex-display').forEach(el => {
-                const ann = el.querySelector('annotation[encoding="application/x-tex"]');
-                if (ann) el.replaceWith('$$' + ann.textContent.trim() + '$$');
-            });
-            tempDiv.querySelectorAll('.katex').forEach(el => {
-                const ann = el.querySelector('annotation[encoding="application/x-tex"]');
-                if (ann) el.replaceWith('$' + ann.textContent.trim() + '$');
-            });
+            tempDiv.querySelectorAll('.katex-display').forEach(el => { const ann = el.querySelector('annotation[encoding="application/x-tex"]'); if (ann) el.replaceWith('$$' + ann.textContent.trim() + '$$'); });
+            tempDiv.querySelectorAll('.katex').forEach(el => { const ann = el.querySelector('annotation[encoding="application/x-tex"]'); if (ann) el.replaceWith('$' + ann.textContent.trim() + '$'); });
             return tempDiv.textContent.trim();
         };
 
-        // --- Markdownテキストを ## 見出しで段落分割 ---
-        const parseSections = (text) => {
+        // --- # 見出しでドキュメント（回答）分割 ---
+        const parseDocuments = (text) => {
             if (!text) return [];
             const lines = text.split('\n');
+            const docs = [];
+            let currentTitle = null;
+            let currentLines = [];
+            let docIndex = 0;
+            let inCodeBlock = false;
+
+            const pushDoc = () => {
+                const content = currentLines.join('\n').trim();
+                if (content || currentTitle) {
+                    docs.push({ id: 'doc-' + docIndex, title: currentTitle || '無題', content, index: docIndex });
+                    docIndex++;
+                }
+            };
+
+            for (const line of lines) {
+                if (line.startsWith('```')) inCodeBlock = !inCodeBlock;
+                if (!inCodeBlock && /^# (?!#)/.test(line)) {
+                    pushDoc();
+                    currentTitle = line.replace(/^# /, '').trim();
+                    currentLines = [];
+                } else {
+                    currentLines.push(line);
+                }
+            }
+            pushDoc();
+            return docs;
+        };
+
+        // --- ## 見出しでセクション（段落）分割 ---
+        const parseSections = (docContent, docId) => {
+            if (!docContent) return [];
+            const lines = docContent.split('\n');
             const sections = [];
             let currentTitle = null;
             let currentContent = [];
@@ -184,19 +179,13 @@
             const pushSection = () => {
                 const content = currentContent.join('\n').trim();
                 if (content || currentTitle) {
-                    sections.push({
-                        id: 'section-' + sectionIndex,
-                        title: currentTitle || '序文',
-                        content: content,
-                        index: sectionIndex
-                    });
+                    sections.push({ id: docId + '-section-' + sectionIndex, title: currentTitle || '序文', content, index: sectionIndex });
                     sectionIndex++;
                 }
             };
 
             for (const line of lines) {
                 if (line.startsWith('```')) inCodeBlock = !inCodeBlock;
-
                 if (!inCodeBlock && /^## (?!#)/.test(line)) {
                     pushSection();
                     currentTitle = line.replace(/^## /, '').trim();
@@ -209,187 +198,93 @@
             return sections;
         };
 
-        // --- LocalStorage ヘルパー ---
+        // --- LocalStorage ---
         const Storage = {
-            getProjectList() {
-                try { return JSON.parse(localStorage.getItem('annotator-project-list') || '[]'); }
-                catch(e) { return []; }
-            },
+            getProjectList() { try { return JSON.parse(localStorage.getItem('annotator-project-list') || '[]'); } catch(e) { return []; } },
             saveProjectList(list) { localStorage.setItem('annotator-project-list', JSON.stringify(list)); },
-            getProjectData(id) {
-                try { return JSON.parse(localStorage.getItem('annotator-project-' + id) || 'null'); }
-                catch(e) { return null; }
-            },
+            getProjectData(id) { try { return JSON.parse(localStorage.getItem('annotator-project-' + id) || 'null'); } catch(e) { return null; } },
             saveProjectData(id, data) { localStorage.setItem('annotator-project-' + id, JSON.stringify(data)); },
             deleteProjectData(id) { localStorage.removeItem('annotator-project-' + id); }
         };
 
-        // --- MarkdownViewer コンポーネント (v2と同一) ---
+        // --- MarkdownViewer ---
         const MarkdownViewer = ({ content, className = "markdown-body", annotations = [], onMarkClick, onMultiMarkClick, onMarkHover, activeAnnotationId }) => {
             const contentRef = useRef(null);
             const callbacksRef = useRef({ onMarkClick, onMultiMarkClick, onMarkHover });
             useEffect(() => { callbacksRef.current = { onMarkClick, onMultiMarkClick, onMarkHover }; }, [onMarkClick, onMultiMarkClick, onMarkHover]);
-
             const annotationsStr = JSON.stringify(annotations.map(a => ({ id: a.id, quote: a.quote, title: a.title })));
 
             useEffect(() => {
                 if (contentRef.current && content) {
                     const mathBlocks = [];
-                    let processedText = content;
-                    processedText = processedText.replace(/\$\$([\s\S]+?)\$\$/g, (m, p1) => { const id = `MATHBLOCK${mathBlocks.length}END`; mathBlocks.push({ id, content: `$$${p1}$$` }); return id; });
-                    processedText = processedText.replace(/\\\[([\s\S]+?)\\\]/g, (m, p1) => { const id = `MATHBLOCK${mathBlocks.length}END`; mathBlocks.push({ id, content: `\\[${p1}\\]` }); return id; });
-                    processedText = processedText.replace(/\$((?:\\.|[^$\n])+?)\$/g, (m, p1) => { const id = `MATHINLINE${mathBlocks.length}END`; mathBlocks.push({ id, content: `$${p1}$` }); return id; });
-                    processedText = processedText.replace(/\\\(([\s\S]+?)\\\)/g, (m, p1) => { const id = `MATHINLINE${mathBlocks.length}END`; mathBlocks.push({ id, content: `\\(${p1}\\)` }); return id; });
-                    let html = marked.parse(processedText);
+                    let pt = content;
+                    pt = pt.replace(/\$\$([\s\S]+?)\$\$/g, (m, p1) => { const id = `MATHBLOCK${mathBlocks.length}END`; mathBlocks.push({ id, content: `$$${p1}$$` }); return id; });
+                    pt = pt.replace(/\\\[([\s\S]+?)\\\]/g, (m, p1) => { const id = `MATHBLOCK${mathBlocks.length}END`; mathBlocks.push({ id, content: `\\[${p1}\\]` }); return id; });
+                    pt = pt.replace(/\$((?:\\.|[^$\n])+?)\$/g, (m, p1) => { const id = `MATHINLINE${mathBlocks.length}END`; mathBlocks.push({ id, content: `$${p1}$` }); return id; });
+                    pt = pt.replace(/\\\(([\s\S]+?)\\\)/g, (m, p1) => { const id = `MATHINLINE${mathBlocks.length}END`; mathBlocks.push({ id, content: `\\(${p1}\\)` }); return id; });
+                    let html = marked.parse(pt);
                     mathBlocks.forEach(block => { html = html.replace(block.id, block.content); });
                     contentRef.current.innerHTML = html;
-                    try {
-                        renderMathInElement(contentRef.current, {
-                            delimiters: [
-                                {left: '$$', right: '$$', display: true},
-                                {left: '$', right: '$', display: false},
-                                {left: '\\(', right: '\\)', display: false},
-                                {left: '\\[', right: '\\]', display: true}
-                            ],
-                            throwOnError: false
-                        });
-                    } catch (e) { console.error("KaTeX rendering error:", e); }
+                    try { renderMathInElement(contentRef.current, { delimiters: [{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}], throwOnError: false }); } catch(e) {}
                 }
             }, [content]);
 
-            // コピー時にKaTeX数式を元のLaTeX形式で保持
             useEffect(() => {
-                const el = contentRef.current;
-                if (!el) return;
+                const el = contentRef.current; if (!el) return;
                 const handleCopy = (e) => {
-                    const selection = window.getSelection();
-                    if (!selection.rangeCount) return;
-                    const range = selection.getRangeAt(0);
-                    const fragment = range.cloneContents();
-                    const tempDiv = document.createElement('div');
-                    tempDiv.appendChild(fragment);
-                    if (!tempDiv.querySelector('.katex')) return;
-                    tempDiv.querySelectorAll('.katex-display').forEach(katexEl => {
-                        const annotation = katexEl.querySelector('annotation[encoding="application/x-tex"]');
-                        if (annotation) katexEl.replaceWith(`\n$$${annotation.textContent.trim()}$$\n`);
-                    });
-                    tempDiv.querySelectorAll('.katex').forEach(katexEl => {
-                        const annotation = katexEl.querySelector('annotation[encoding="application/x-tex"]');
-                        if (annotation) katexEl.replaceWith(`$${annotation.textContent.trim()}$`);
-                    });
-                    e.preventDefault();
-                    e.clipboardData.setData('text/plain', tempDiv.textContent);
+                    const sel = window.getSelection(); if (!sel.rangeCount) return;
+                    const frag = sel.getRangeAt(0).cloneContents();
+                    const tmp = document.createElement('div'); tmp.appendChild(frag);
+                    if (!tmp.querySelector('.katex')) return;
+                    tmp.querySelectorAll('.katex-display').forEach(k => { const a = k.querySelector('annotation[encoding="application/x-tex"]'); if (a) k.replaceWith(`\n$$${a.textContent.trim()}$$\n`); });
+                    tmp.querySelectorAll('.katex').forEach(k => { const a = k.querySelector('annotation[encoding="application/x-tex"]'); if (a) k.replaceWith(`$${a.textContent.trim()}$`); });
+                    e.preventDefault(); e.clipboardData.setData('text/plain', tmp.textContent);
                 };
                 el.addEventListener('copy', handleCopy);
                 return () => el.removeEventListener('copy', handleCopy);
             }, []);
 
-            // 仮想テキストベースのカスタムハイライト
             useEffect(() => {
-                const root = contentRef.current;
-                if (!root) return;
-                root.querySelectorAll('.annotation-mark').forEach(mark => {
-                    const parent = mark.parentNode;
-                    while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
-                    parent.removeChild(mark);
-                });
+                const root = contentRef.current; if (!root) return;
+                root.querySelectorAll('.annotation-mark').forEach(mark => { const p = mark.parentNode; while (mark.firstChild) p.insertBefore(mark.firstChild, mark); p.removeChild(mark); });
                 root.normalize();
-
-                const parsedAnnotations = JSON.parse(annotationsStr);
-                if (!parsedAnnotations || parsedAnnotations.length === 0) return;
-
-                const segments = [];
-                let vOffset = 0;
-                const walkDom = (node) => {
-                    if (node.nodeType === 3) {
-                        const t = node.textContent;
-                        if (t.length > 0) { segments.push({ type: 'text', node, text: t, vStart: vOffset, vEnd: vOffset + t.length }); vOffset += t.length; }
-                        return;
-                    }
+                const parsed = JSON.parse(annotationsStr);
+                if (!parsed || parsed.length === 0) return;
+                const segments = []; let vOff = 0;
+                const walk = (node) => {
+                    if (node.nodeType === 3) { const t = node.textContent; if (t.length > 0) { segments.push({ type:'text', node, text:t, vStart:vOff, vEnd:vOff+t.length }); vOff += t.length; } return; }
                     if (node.nodeType !== 1) return;
-                    if (node.classList.contains('katex-display')) {
-                        const ann = node.querySelector('annotation[encoding="application/x-tex"]');
-                        if (ann) { const t = '$$' + ann.textContent.trim() + '$$'; segments.push({ type: 'katex-display', node, text: t, vStart: vOffset, vEnd: vOffset + t.length }); vOffset += t.length; }
-                        return;
-                    }
-                    if (node.classList.contains('katex')) {
-                        const ann = node.querySelector('annotation[encoding="application/x-tex"]');
-                        if (ann) { const t = '$' + ann.textContent.trim() + '$'; segments.push({ type: 'katex', node, text: t, vStart: vOffset, vEnd: vOffset + t.length }); vOffset += t.length; }
-                        return;
-                    }
-                    for (const child of Array.from(node.childNodes)) walkDom(child);
+                    if (node.classList.contains('katex-display')) { const a = node.querySelector('annotation[encoding="application/x-tex"]'); if (a) { const t = '$$'+a.textContent.trim()+'$$'; segments.push({ type:'katex-display', node, text:t, vStart:vOff, vEnd:vOff+t.length }); vOff += t.length; } return; }
+                    if (node.classList.contains('katex')) { const a = node.querySelector('annotation[encoding="application/x-tex"]'); if (a) { const t = '$'+a.textContent.trim()+'$'; segments.push({ type:'katex', node, text:t, vStart:vOff, vEnd:vOff+t.length }); vOff += t.length; } return; }
+                    for (const c of Array.from(node.childNodes)) walk(c);
                 };
-                walkDom(root);
-                const virtualText = segments.map(s => s.text).join('');
-
-                const allMatches = [];
-                for (const anno of parsedAnnotations) {
-                    if (!anno.quote) continue;
-                    const idx = virtualText.indexOf(anno.quote);
-                    if (idx === -1) continue;
-                    allMatches.push({ id: anno.id, title: anno.title, start: idx, end: idx + anno.quote.length });
-                }
-                if (allMatches.length === 0) return;
-
-                const setupEvents = (el, covering) => {
-                    el.onmouseenter = () => {
-                        if (callbacksRef.current.onMarkHover) {
-                            const rect = el.getBoundingClientRect();
-                            const titles = covering.map(m => m.title).filter(Boolean);
-                            callbacksRef.current.onMarkHover(true, titles.length > 1 ? titles.join(' / ') : (titles[0] || '注釈を表示'), rect);
-                        }
-                    };
+                walk(root);
+                const vText = segments.map(s => s.text).join('');
+                const matches = [];
+                for (const a of parsed) { if (!a.quote) continue; const idx = vText.indexOf(a.quote); if (idx === -1) continue; matches.push({ id:a.id, title:a.title, start:idx, end:idx+a.quote.length }); }
+                if (matches.length === 0) return;
+                const setupEv = (el, cov) => {
+                    el.onmouseenter = () => { if (callbacksRef.current.onMarkHover) { const r = el.getBoundingClientRect(); const t = cov.map(m=>m.title).filter(Boolean); callbacksRef.current.onMarkHover(true, t.length>1?t.join(' / '):(t[0]||'注釈'), r); } };
                     el.onmouseleave = () => { if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false); };
-                    el.onclick = (e) => {
-                        e.preventDefault(); e.stopPropagation();
-                        window.getSelection().removeAllRanges();
-                        if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false);
-                        const ids = covering.map(m => m.id);
-                        if (ids.length > 1 && callbacksRef.current.onMultiMarkClick) {
-                            callbacksRef.current.onMultiMarkClick(ids, el.getBoundingClientRect());
-                        } else if (callbacksRef.current.onMarkClick) {
-                            callbacksRef.current.onMarkClick(ids[0]);
-                        }
-                    };
+                    el.onclick = (e) => { e.preventDefault(); e.stopPropagation(); window.getSelection().removeAllRanges(); if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false); const ids = cov.map(m=>m.id); if (ids.length>1 && callbacksRef.current.onMultiMarkClick) callbacksRef.current.onMultiMarkClick(ids, el.getBoundingClientRect()); else if (callbacksRef.current.onMarkClick) callbacksRef.current.onMarkClick(ids[0]); };
                 };
-
-                for (let i = segments.length - 1; i >= 0; i--) {
+                for (let i = segments.length-1; i >= 0; i--) {
                     const seg = segments[i];
-                    const overlapping = allMatches.filter(m => m.start < seg.vEnd && m.end > seg.vStart);
-                    if (overlapping.length === 0) continue;
+                    const ol = matches.filter(m => m.start < seg.vEnd && m.end > seg.vStart);
+                    if (ol.length === 0) continue;
                     if (seg.type === 'katex' || seg.type === 'katex-display') {
-                        const wrapper = document.createElement('span');
-                        wrapper.className = 'annotation-mark' + (overlapping.some(m => m.id === activeAnnotationId) ? ' active' : '');
-                        wrapper.dataset.annoId = overlapping[0].id;
-                        if (seg.type === 'katex-display') wrapper.style.display = 'block';
-                        setupEvents(wrapper, overlapping);
-                        seg.node.parentNode.insertBefore(wrapper, seg.node);
-                        wrapper.appendChild(seg.node);
+                        const w = document.createElement('span'); w.className = 'annotation-mark'+(ol.some(m=>m.id===activeAnnotationId)?' active':''); w.dataset.annoId = ol[0].id;
+                        if (seg.type === 'katex-display') w.style.display = 'block'; setupEv(w, ol); seg.node.parentNode.insertBefore(w, seg.node); w.appendChild(seg.node);
                     } else if (seg.type === 'text') {
-                        const text = seg.node.textContent;
-                        const boundaries = new Set([0, text.length]);
-                        for (const m of overlapping) {
-                            boundaries.add(Math.max(0, m.start - seg.vStart));
-                            boundaries.add(Math.min(text.length, m.end - seg.vStart));
-                        }
-                        const sorted = Array.from(boundaries).sort((a, b) => a - b);
-                        const frag = document.createDocumentFragment();
-                        for (let j = 0; j < sorted.length - 1; j++) {
-                            const s = sorted[j], e = sorted[j + 1];
-                            const sub = text.substring(s, e);
-                            if (!sub) continue;
-                            const fragVS = seg.vStart + s, fragVE = seg.vStart + e;
-                            const covering = overlapping.filter(m => m.start <= fragVS && m.end >= fragVE);
-                            if (covering.length > 0) {
-                                const span = document.createElement('span');
-                                span.className = 'annotation-mark' + (covering.some(m => m.id === activeAnnotationId) ? ' active' : '');
-                                span.dataset.annoId = covering[0].id;
-                                span.textContent = sub;
-                                setupEvents(span, covering);
-                                frag.appendChild(span);
-                            } else {
-                                frag.appendChild(document.createTextNode(sub));
-                            }
+                        const txt = seg.node.textContent; const bds = new Set([0, txt.length]);
+                        for (const m of ol) { bds.add(Math.max(0, m.start-seg.vStart)); bds.add(Math.min(txt.length, m.end-seg.vStart)); }
+                        const sorted = Array.from(bds).sort((a,b)=>a-b); const frag = document.createDocumentFragment();
+                        for (let j = 0; j < sorted.length-1; j++) {
+                            const s = sorted[j], e = sorted[j+1]; const sub = txt.substring(s, e); if (!sub) continue;
+                            const vs = seg.vStart+s, ve = seg.vStart+e;
+                            const cov = ol.filter(m => m.start<=vs && m.end>=ve);
+                            if (cov.length > 0) { const sp = document.createElement('span'); sp.className = 'annotation-mark'+(cov.some(m=>m.id===activeAnnotationId)?' active':''); sp.dataset.annoId = cov[0].id; sp.textContent = sub; setupEv(sp, cov); frag.appendChild(sp); }
+                            else frag.appendChild(document.createTextNode(sub));
                         }
                         seg.node.parentNode.replaceChild(frag, seg.node);
                     }
@@ -403,68 +298,44 @@
         // --- ホーム画面 ---
         const HomeScreen = ({ projects, onOpen, onCreateNew, onDelete, onExportSingle, onExportAll, onImport }) => {
             const fileInputRef = useRef(null);
-            const handleFileChange = (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    try { onImport(JSON.parse(event.target.result)); }
-                    catch(err) { alert('ファイルの読み込みに失敗しました。'); }
-                };
-                reader.readAsText(file);
-                e.target.value = '';
-            };
-
+            const handleFileChange = (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = (ev) => { try { onImport(JSON.parse(ev.target.result)); } catch(err) { alert('ファイルの読み込みに失敗しました。'); } }; r.readAsText(f); e.target.value = ''; };
             return (
                 <div className="flex-1 overflow-y-auto bg-gray-50">
                     <div className="max-w-4xl mx-auto px-6 py-10 animate-fade-in-up">
                         <div className="flex items-center justify-between mb-8">
-                            <div>
-                                <h2 className="text-2xl font-bold text-gray-800">保存済みのまとめ</h2>
-                                <p className="text-gray-500 text-sm mt-1">{projects.length} 件のまとめ</p>
-                            </div>
+                            <div><h2 className="text-2xl font-bold text-gray-800">保存済みのまとめ</h2><p className="text-gray-500 text-sm mt-1">{projects.length} 件</p></div>
                             <div className="flex items-center gap-3">
-                                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
-                                    <i className="ph-bold ph-upload-simple"></i> インポート
-                                </button>
+                                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2"><i className="ph-bold ph-upload-simple"></i> インポート</button>
                                 <input ref={fileInputRef} type="file" accept=".json" onChange={handleFileChange} className="hidden" />
-                                {projects.length > 0 && (
-                                    <button onClick={onExportAll} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
-                                        <i className="ph-bold ph-download-simple"></i> 全てエクスポート
-                                    </button>
-                                )}
-                                <button onClick={onCreateNew} className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center gap-2 transition-colors shadow-sm">
-                                    <i className="ph-bold ph-plus"></i> 新規作成
-                                </button>
+                                {projects.length > 0 && <button onClick={onExportAll} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2"><i className="ph-bold ph-download-simple"></i> 全てエクスポート</button>}
+                                <button onClick={onCreateNew} className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center gap-2 shadow-sm"><i className="ph-bold ph-plus"></i> 新規作成</button>
                             </div>
                         </div>
                         {projects.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 text-gray-400">
                                 <div className="w-24 h-24 bg-blue-100 text-blue-300 rounded-full flex items-center justify-center mb-6 shadow-inner"><i className="ph-fill ph-notebook text-5xl"></i></div>
-                                <h3 className="text-xl font-bold text-gray-400 mb-2">まだまとめがありません</h3>
-                                <p className="text-sm text-gray-400 max-w-sm text-center leading-relaxed">「新規作成」ボタンからLLMの回答を貼り付けて、注釈付きのまとめを作成しましょう。</p>
+                                <h3 className="text-xl font-bold mb-2">まだまとめがありません</h3>
+                                <p className="text-sm max-w-sm text-center leading-relaxed">「新規作成」からLLMの回答を貼り付けて注釈付きまとめを作成しましょう。</p>
                             </div>
                         ) : (
-                            <div className="grid gap-4">
-                                {projects.map(project => (
-                                    <div key={project.id} onClick={() => onOpen(project.id)} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group">
-                                        <div className="p-5 flex items-start justify-between">
-                                            <div className="flex-1 min-w-0">
-                                                <h3 className="font-bold text-gray-800 text-lg truncate group-hover:text-blue-600 transition-colors">{project.name}</h3>
-                                                <div className="flex items-center gap-4 mt-2 text-sm text-gray-400">
-                                                    <span className="flex items-center gap-1"><i className="ph ph-calendar-blank"></i>{new Date(project.createdAt).toLocaleDateString('ja-JP')}</span>
-                                                    <span className="flex items-center gap-1"><i className="ph ph-chat-teardrop-text"></i>{project.annotationCount || 0} 件の注釈</span>
-                                                </div>
-                                                {project.preview && <p className="mt-3 text-sm text-gray-500 line-clamp-2 leading-relaxed">{project.preview}</p>}
+                            <div className="grid gap-4">{projects.map(p => (
+                                <div key={p.id} onClick={() => onOpen(p.id)} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group">
+                                    <div className="p-5 flex items-start justify-between">
+                                        <div className="flex-1 min-w-0">
+                                            <h3 className="font-bold text-gray-800 text-lg truncate group-hover:text-blue-600">{p.name}</h3>
+                                            <div className="flex items-center gap-4 mt-2 text-sm text-gray-400">
+                                                <span className="flex items-center gap-1"><i className="ph ph-calendar-blank"></i>{new Date(p.createdAt).toLocaleDateString('ja-JP')}</span>
+                                                <span className="flex items-center gap-1"><i className="ph ph-chat-teardrop-text"></i>{p.annotationCount || 0} 注釈</span>
                                             </div>
-                                            <div className="flex items-center gap-1 ml-4 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={(e) => { e.stopPropagation(); onExportSingle(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="エクスポート"><i className="ph ph-download-simple text-lg"></i></button>
-                                                <button onClick={(e) => { e.stopPropagation(); if(confirm('\u300c' + project.name + '\u300d\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f')) onDelete(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除"><i className="ph ph-trash text-lg"></i></button>
-                                            </div>
+                                            {p.preview && <p className="mt-3 text-sm text-gray-500 line-clamp-2">{p.preview}</p>}
+                                        </div>
+                                        <div className="flex items-center gap-1 ml-4 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={(e) => { e.stopPropagation(); onExportSingle(p.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100" title="エクスポート"><i className="ph ph-download-simple text-lg"></i></button>
+                                            <button onClick={(e) => { e.stopPropagation(); if(confirm('\u300c'+p.name+'\u300d\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f')) onDelete(p.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100" title="削除"><i className="ph ph-trash text-lg"></i></button>
                                         </div>
                                     </div>
-                                ))}
-                            </div>
+                                </div>
+                            ))}</div>
                         )}
                     </div>
                 </div>
@@ -480,22 +351,15 @@
                     <div className="w-full max-w-4xl bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col h-[80vh] animate-fade-in-up">
                         <div className="p-6 border-b border-gray-100 bg-gray-50 shrink-0">
                             <div className="flex justify-between items-center">
-                                <div>
-                                    <h1 className="text-2xl font-bold text-gray-800">{isNew ? '新しいまとめを作成' : '主軸テキストの編集'}</h1>
-                                    <p className="text-gray-500 text-sm mt-1">Markdown形式で貼り付けてください。## 見出しが段落の区切りになります。</p>
-                                </div>
+                                <div><h1 className="text-2xl font-bold text-gray-800">{isNew ? '新しいまとめを作成' : '主軸テキストの編集'}</h1><p className="text-gray-500 text-sm mt-1"># で回答の区切り、## で段落の区切りになります</p></div>
                                 <div className="flex items-center gap-3">
-                                    {onCancel && <button onClick={onCancel} className="px-5 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg font-bold hover:bg-gray-50 transition-colors">キャンセル</button>}
-                                    <button onClick={() => onSave(name, text)} disabled={!text.trim() || !name.trim()} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm">保存して注釈を始める</button>
+                                    {onCancel && <button onClick={onCancel} className="px-5 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg font-bold hover:bg-gray-50">キャンセル</button>}
+                                    <button onClick={() => onSave(name, text)} disabled={!text.trim() || !name.trim()} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm">保存して注釈を始める</button>
                                 </div>
                             </div>
-                            <div className="mt-4">
-                                <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white text-lg" placeholder="まとめのタイトルを入力" />
-                            </div>
+                            <div className="mt-4"><input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white text-lg" placeholder="まとめのタイトル" /></div>
                         </div>
-                        <div className="flex-1 relative">
-                            <textarea className="w-full h-full p-6 resize-none focus:outline-none text-gray-700 leading-relaxed text-lg font-mono" placeholder="ここにMarkdownテキストをペースト...\n\n## 第1章\n内容...\n\n## 第2章\n内容..." value={text} onChange={e => setText(e.target.value)}></textarea>
-                        </div>
+                        <div className="flex-1 relative"><textarea className="w-full h-full p-6 resize-none focus:outline-none text-gray-700 leading-relaxed text-lg font-mono" placeholder={"# 回答1のタイトル\n\n## セクション1\n内容...\n\n## セクション2\n内容...\n\n# 回答2のタイトル\n\n## セクション1\n内容..."} value={text} onChange={e => setText(e.target.value)}></textarea></div>
                     </div>
                 </div>
             );
@@ -508,63 +372,48 @@
             return (
                 <div className="flex flex-col h-full animate-slide-in-right bg-slate-50">
                     <div className="p-4 border-b border-gray-200 bg-white flex items-center justify-between shrink-0 shadow-sm z-10">
-                        <div className="flex items-center gap-2">
-                            <i className={`ph-fill ${mode === 'add' ? 'ph-plus-circle text-blue-500' : 'ph-pencil-simple text-orange-500'} text-xl`}></i>
-                            <h3 className="font-bold text-gray-700">{mode === 'add' ? '新規注釈の追加' : '注釈の編集'}</h3>
-                        </div>
-                        <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 transition-colors"><i className="ph-bold ph-x text-lg"></i></button>
+                        <div className="flex items-center gap-2"><i className={`ph-fill ${mode==='add'?'ph-plus-circle text-blue-500':'ph-pencil-simple text-orange-500'} text-xl`}></i><h3 className="font-bold text-gray-700">{mode==='add'?'新規注釈の追加':'注釈の編集'}</h3></div>
+                        <button onClick={onCancel} className="text-gray-400 hover:text-gray-600"><i className="ph-bold ph-x text-lg"></i></button>
                     </div>
                     <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
                         <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm">
-                            <p className="text-xs text-slate-400 font-bold mb-2 flex items-center gap-1 uppercase tracking-wider"><i className="ph-bold ph-quotes"></i> 対象テキスト (From: {parentTitle})</p>
-                            <p className="text-gray-700 italic line-clamp-4 leading-relaxed text-sm bg-yellow-50 p-3 rounded border-l-2 border-yellow-400">{quote}</p>
+                            <p className="text-xs text-slate-400 font-bold mb-2 uppercase tracking-wider"><i className="ph-bold ph-quotes"></i> 対象 (From: {parentTitle})</p>
+                            <p className="text-gray-700 italic line-clamp-4 text-sm bg-yellow-50 p-3 rounded border-l-2 border-yellow-400">{quote}</p>
                         </div>
-                        <div>
-                            <label className="block text-sm font-bold text-gray-600 mb-2">タイトル / 要約</label>
-                            <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white shadow-sm" placeholder="例：この概念の具体例" />
-                        </div>
+                        <div><label className="block text-sm font-bold text-gray-600 mb-2">タイトル</label><input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white shadow-sm" placeholder="例：この概念の具体例" /></div>
                         <div className="flex-1 flex flex-col">
-                            <label className="block text-sm font-bold text-gray-600 mb-2 flex justify-between">
-                                <span>本文</span>
-                                <span className="text-xs text-gray-400 font-normal px-2 py-0.5 bg-gray-200 rounded">Markdown & LaTeX対応</span>
-                            </label>
-                            <textarea value={content} onChange={e => setContent(e.target.value)} className="flex-1 w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-none font-mono text-sm bg-white shadow-sm" placeholder="マークダウン形式で詳細を記述"></textarea>
+                            <label className="block text-sm font-bold text-gray-600 mb-2 flex justify-between"><span>本文</span><span className="text-xs text-gray-400 font-normal px-2 py-0.5 bg-gray-200 rounded">Markdown & LaTeX</span></label>
+                            <textarea value={content} onChange={e => setContent(e.target.value)} className="flex-1 w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none font-mono text-sm bg-white shadow-sm" placeholder="マークダウン形式で記述"></textarea>
                         </div>
                     </div>
                     <div className="p-4 border-t border-gray-200 bg-white flex justify-end gap-3 shrink-0">
-                        <button onClick={onCancel} className="px-6 py-2.5 rounded-lg font-bold text-gray-600 hover:bg-gray-100 transition-colors">キャンセル</button>
-                        <button onClick={() => onSave(title, content)} disabled={!title.trim() || !content.trim()} className="px-6 py-2.5 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-sm"><i className="ph-bold ph-check"></i> 保存</button>
+                        <button onClick={onCancel} className="px-6 py-2.5 rounded-lg font-bold text-gray-600 hover:bg-gray-100">キャンセル</button>
+                        <button onClick={() => onSave(title, content)} disabled={!title.trim() || !content.trim()} className="px-6 py-2.5 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 shadow-sm"><i className="ph-bold ph-check"></i> 保存</button>
                     </div>
                 </div>
             );
         };
 
-        // --- アウトライン（目次）サイドバー ---
-        const DocumentOutline = ({ sections, activeSectionIndex, annotationCounts, onSelectSection }) => (
-            <div className="outline-sidebar flex flex-col h-full">
-                <div className="px-5 py-4 border-b border-slate-700/50 shrink-0">
-                    <h2 className="text-base font-bold text-white flex items-center gap-2.5">
-                        <i className="ph-fill ph-list-bullets text-blue-400 text-xl"></i>
-                        目次
+        // --- ドキュメント一覧（最左サイドバー） ---
+        const DocumentList = ({ documents, activeDocIndex, annotationCounts, onSelectDoc }) => (
+            <div className="doc-sidebar flex flex-col h-full">
+                <div className="px-4 py-3 border-b border-white/5 shrink-0">
+                    <h2 className="text-sm font-bold text-slate-400 flex items-center gap-2">
+                        <i className="ph-fill ph-books text-blue-400 text-lg"></i>
+                        回答一覧
                     </h2>
-                    <p className="text-xs text-slate-500 mt-1">{sections.length} セクション</p>
+                    <p className="text-[11px] text-slate-600 mt-0.5">{documents.length} 件の回答</p>
                 </div>
-                <div className="flex-1 overflow-y-auto py-2">
-                    {sections.map((section, idx) => (
-                        <div
-                            key={section.id}
-                            id={'outline-item-' + idx}
-                            onClick={() => onSelectSection(idx)}
-                            className={'outline-item' + (idx === activeSectionIndex ? ' active' : '')}
-                        >
-                            <div className="flex items-start gap-3">
-                                <span className="text-xs font-mono opacity-40 mt-0.5 shrink-0">{String(idx + 1).padStart(2, '0')}</span>
+                <div className="flex-1 overflow-y-auto py-1">
+                    {documents.map((doc, idx) => (
+                        <div key={doc.id} onClick={() => onSelectDoc(idx)} className={'doc-item' + (idx === activeDocIndex ? ' active' : '')}>
+                            <div className="flex items-start gap-2.5">
+                                <span className="text-[11px] font-mono opacity-40 mt-0.5 shrink-0">{String(idx + 1).padStart(2, '0')}</span>
                                 <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-[15px] leading-snug break-words">{section.title}</p>
-                                    {(annotationCounts[section.id] || 0) > 0 && (
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/20 text-blue-300 text-[11px] rounded-full mt-1.5 font-medium">
-                                            <i className="ph-fill ph-chat-teardrop-text text-[10px]"></i>
-                                            {annotationCounts[section.id]}
+                                    <p className="font-medium text-[13px] leading-snug break-words line-clamp-2">{doc.title}</p>
+                                    {(annotationCounts[doc.id] || 0) > 0 && (
+                                        <span className="inline-flex items-center gap-0.5 text-[10px] text-blue-400 mt-1 opacity-70">
+                                            <i className="ph-fill ph-chat-teardrop-text"></i>{annotationCounts[doc.id]}
                                         </span>
                                     )}
                                 </div>
@@ -575,7 +424,37 @@
             </div>
         );
 
-        // --- 注釈リストバー（各ペイン上部に表示） ---
+        // --- セクション目次（左から2番目サイドバー） ---
+        const SectionOutline = ({ docTitle, sections, activeSectionIndex, annotationCounts, onSelectSection }) => (
+            <div className="section-sidebar flex flex-col h-full">
+                <div className="px-4 py-3 border-b border-slate-700/50 shrink-0">
+                    <p className="text-[11px] text-slate-500 uppercase tracking-wider font-bold mb-1">段落一覧</p>
+                    <h2 className="text-sm font-bold text-white leading-snug line-clamp-2">{docTitle}</h2>
+                </div>
+                <div className="flex-1 overflow-y-auto py-1">
+                    {sections.map((sec, idx) => (
+                        <div key={sec.id} onClick={() => onSelectSection(idx)} className={'section-item' + (idx === activeSectionIndex ? ' active' : '')}>
+                            <div className="flex items-start gap-2.5">
+                                <span className="text-[11px] font-mono opacity-40 mt-0.5 shrink-0">{String(idx + 1).padStart(2, '0')}</span>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-[14px] leading-snug break-words">{sec.title}</p>
+                                    {(annotationCounts[sec.id] || 0) > 0 && (
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-500/20 text-blue-300 text-[10px] rounded-full mt-1 font-medium">
+                                            <i className="ph-fill ph-chat-teardrop-text text-[9px]"></i>{annotationCounts[sec.id]}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                    {sections.length === 0 && (
+                        <div className="px-4 py-8 text-center text-slate-500 text-xs">この回答に ## 段落はありません</div>
+                    )}
+                </div>
+            </div>
+        );
+
+        // --- 注釈リストバー ---
         const AnnotationListBar = ({ annotations, activeAnnotationId, onSelect }) => {
             if (annotations.length === 0) return null;
             return (
@@ -585,16 +464,12 @@
                         <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">注釈 ({annotations.length})</span>
                     </div>
                     <div className="max-h-[200px] overflow-y-auto">
-                        {annotations.map(anno => (
-                            <div
-                                key={anno.id}
-                                onClick={() => onSelect(anno.id)}
-                                className={'anno-list-item flex items-center gap-2.5' + (anno.id === activeAnnotationId ? ' active' : '')}
-                            >
+                        {annotations.map(a => (
+                            <div key={a.id} onClick={() => onSelect(a.id)} className={'anno-list-item flex items-center gap-2.5' + (a.id === activeAnnotationId ? ' active' : '')}>
                                 <i className="ph ph-caret-right text-[10px] text-gray-400 shrink-0"></i>
                                 <div className="flex-1 min-w-0">
-                                    <span className="text-sm font-medium text-gray-700 truncate block">{anno.title}</span>
-                                    <span className="text-[11px] text-gray-400 truncate block">"{anno.quote?.substring(0, 40)}{anno.quote?.length > 40 ? '...' : ''}"</span>
+                                    <span className="text-sm font-medium text-gray-700 truncate block">{a.title}</span>
+                                    <span className="text-[11px] text-gray-400 truncate block">"{a.quote?.substring(0, 40)}{(a.quote?.length||0) > 40 ? '...' : ''}"</span>
                                 </div>
                             </div>
                         ))}
@@ -612,60 +487,47 @@
             const [mainText, setMainText] = useState('');
             const [annotations, setAnnotations] = useState([]);
 
-            // panes: セクションペイン + 注釈ペインの連鎖
-            // { id, type: 'section'|'annotation'|'add'|'edit', sectionIndex?, annotationId?, targetId?, quote? }
+            const [selectedDocIndex, setSelectedDocIndex] = useState(null);
+            // panes[0] = section pane, panes[1+] = annotation/add/edit panes
             const [panes, setPanes] = useState([]);
 
-            const [selectionMenu, setSelectionMenu] = useState({ show: false, top: 0, left: 0, text: '', paneIndex: 0, targetId: '' });
+            const [selectionMenu, setSelectionMenu] = useState({ show: false });
             const [tooltip, setTooltip] = useState({ show: false, text: '', top: 0, left: 0 });
             const [annotationPicker, setAnnotationPicker] = useState({ show: false, annoIds: [], top: 0, left: 0, paneIndex: 0 });
 
             const scrollContainerRef = useRef(null);
 
-            // セクションをメモ化
-            const sections = useMemo(() => parseSections(mainText), [mainText]);
+            // ドキュメント・セクションをメモ化
+            const documents = useMemo(() => parseDocuments(mainText), [mainText]);
+            const selectedDoc = selectedDocIndex !== null && selectedDocIndex < documents.length ? documents[selectedDocIndex] : null;
+            const sections = useMemo(() => selectedDoc ? parseSections(selectedDoc.content, selectedDoc.id) : [], [selectedDoc?.id, selectedDoc?.content]);
 
-            // 現在アクティブなセクションのインデックス
             const activeSectionIndex = panes.length > 0 && panes[0].type === 'section' ? panes[0].sectionIndex : null;
 
-            // セクションごとの注釈数
+            // 注釈カウント（セクション別＆ドキュメント別）
             const annotationCounts = useMemo(() => {
                 const counts = {};
-                for (const anno of annotations) {
-                    counts[anno.targetId] = (counts[anno.targetId] || 0) + 1;
-                }
+                for (const a of annotations) counts[a.targetId] = (counts[a.targetId] || 0) + 1;
                 return counts;
             }, [annotations]);
+
+            const docAnnotationCounts = useMemo(() => {
+                const counts = {};
+                for (const doc of documents) {
+                    counts[doc.id] = annotations.filter(a => a.targetId.startsWith(doc.id + '-')).length;
+                }
+                return counts;
+            }, [documents, annotations]);
 
             // --- 初期化 ---
             useEffect(() => {
                 let list = Storage.getProjectList();
                 if (list.length === 0) {
-                    let migratedData = null;
-                    const v5Raw = localStorage.getItem('inline-annotations-data-v5');
-                    if (v5Raw) {
-                        try {
-                            const parsed = JSON.parse(v5Raw);
-                            if (parsed.mainText) migratedData = { mainText: parsed.mainText, annotations: parsed.annotations || [] };
-                        } catch(e) {}
-                    }
-                    if (!migratedData) {
-                        const v2Raw = localStorage.getItem('inline-annotations-data-v2');
-                        if (v2Raw) {
-                            try {
-                                const parsed = JSON.parse(v2Raw);
-                                if (parsed.mainText) migratedData = { mainText: parsed.mainText, annotations: (parsed.annotations || []).map(a => ({...a, targetId: 'main'})) };
-                            } catch(e) {}
-                        }
-                    }
-                    if (migratedData) {
-                        const id = generateId();
-                        const now = Date.now();
-                        const project = { id, name: '移行されたまとめ', createdAt: now, updatedAt: now, annotationCount: migratedData.annotations.length, preview: migratedData.mainText.substring(0, 100) };
-                        list = [project];
-                        Storage.saveProjectList(list);
-                        Storage.saveProjectData(id, migratedData);
-                    }
+                    let md = null;
+                    const v5 = localStorage.getItem('inline-annotations-data-v5');
+                    if (v5) { try { const p = JSON.parse(v5); if (p.mainText) md = { mainText: p.mainText, annotations: p.annotations || [] }; } catch(e) {} }
+                    if (!md) { const v2 = localStorage.getItem('inline-annotations-data-v2'); if (v2) { try { const p = JSON.parse(v2); if (p.mainText) md = { mainText: p.mainText, annotations: (p.annotations||[]).map(a => ({...a, targetId:'main'})) }; } catch(e) {} } }
+                    if (md) { const id = generateId(); const now = Date.now(); list = [{ id, name:'移行されたまとめ', createdAt:now, updatedAt:now, annotationCount:md.annotations.length, preview:md.mainText.substring(0,100) }]; Storage.saveProjectList(list); Storage.saveProjectData(id, md); }
                 }
                 setProjectList(list);
             }, []);
@@ -674,474 +536,288 @@
             useEffect(() => {
                 if (!currentProjectId || !mainText) return;
                 Storage.saveProjectData(currentProjectId, { mainText, annotations });
-                setProjectList(prev => {
-                    const updated = prev.map(p => p.id === currentProjectId ? { ...p, updatedAt: Date.now(), annotationCount: annotations.length, preview: mainText.substring(0, 100) } : p);
-                    Storage.saveProjectList(updated);
-                    return updated;
-                });
+                setProjectList(prev => { const u = prev.map(p => p.id===currentProjectId ? {...p, updatedAt:Date.now(), annotationCount:annotations.length, preview:mainText.substring(0,100)} : p); Storage.saveProjectList(u); return u; });
             }, [mainText, annotations, currentProjectId]);
 
             // --- ペイン追加時に右端へスクロール ---
             useEffect(() => {
                 if (scrollContainerRef.current && panes.length > 1) {
-                    setTimeout(() => {
-                        scrollContainerRef.current.scrollTo({ left: scrollContainerRef.current.scrollWidth, behavior: 'smooth' });
-                    }, 50);
+                    setTimeout(() => { scrollContainerRef.current.scrollTo({ left: scrollContainerRef.current.scrollWidth, behavior: 'smooth' }); }, 50);
                 }
             }, [panes.length]);
 
-            // --- 注釈のセクション再マッピング ---
+            // --- 注釈マイグレーション（旧形式 → doc-N-section-M 形式） ---
             useEffect(() => {
-                if (!mainText || annotations.length === 0 || sections.length === 0) return;
-                const validSectionIds = new Set(sections.map(s => s.id));
-                const needsRemapping = annotations.some(a => a.targetId === 'main' || (a.targetId.startsWith('section-') && !validSectionIds.has(a.targetId)));
-                if (needsRemapping) {
-                    setAnnotations(prev => prev.map(anno => {
-                        if (anno.targetId === 'main' || (anno.targetId.startsWith('section-') && !validSectionIds.has(anno.targetId))) {
-                            for (const sec of sections) {
-                                if (sec.content.includes(anno.quote)) return { ...anno, targetId: sec.id };
-                            }
-                            return { ...anno, targetId: sections[0].id };
-                        }
-                        return anno;
-                    }));
-                }
-            }, [mainText, sections.length]);
+                if (!mainText || annotations.length === 0) return;
+                const docs = parseDocuments(mainText);
+                const allSections = [];
+                for (const d of docs) allSections.push(...parseSections(d.content, d.id));
+                if (allSections.length === 0) return;
+
+                const needsMigration = annotations.some(a =>
+                    a.targetId === 'main' ||
+                    (a.targetId.startsWith('section-') && !a.targetId.startsWith('doc-'))
+                );
+                if (!needsMigration) return;
+
+                setAnnotations(prev => prev.map(anno => {
+                    if (anno.targetId === 'main' || (anno.targetId.startsWith('section-') && !anno.targetId.startsWith('doc-'))) {
+                        for (const sec of allSections) { if (sec.content.includes(anno.quote)) return { ...anno, targetId: sec.id }; }
+                        return { ...anno, targetId: allSections[0].id };
+                    }
+                    return anno;
+                }));
+            }, [mainText]);
 
             // --- プロジェクト管理 ---
             const openProject = (id) => {
-                const data = Storage.getProjectData(id);
-                const meta = projectList.find(p => p.id === id);
+                const data = Storage.getProjectData(id); const meta = projectList.find(p => p.id === id);
                 if (data && meta) {
-                    setCurrentProjectId(id);
-                    setCurrentProjectName(meta.name);
-                    setMainText(data.mainText);
-                    setAnnotations(data.annotations || []);
+                    setCurrentProjectId(id); setCurrentProjectName(meta.name);
+                    setMainText(data.mainText); setAnnotations(data.annotations || []);
+                    setSelectedDocIndex(null); setPanes([]);
                     setAppMode('workspace');
-                    setPanes([]);
                 }
             };
-
-            const createNewProject = () => {
-                setCurrentProjectId(null);
-                setCurrentProjectName('');
-                setMainText('');
-                setAnnotations([]);
-                setAppMode('setup');
-            };
-
-            const deleteProject = (id) => {
-                Storage.deleteProjectData(id);
-                setProjectList(prev => { const updated = prev.filter(p => p.id !== id); Storage.saveProjectList(updated); return updated; });
-            };
-
+            const createNewProject = () => { setCurrentProjectId(null); setCurrentProjectName(''); setMainText(''); setAnnotations([]); setAppMode('setup'); };
+            const deleteProject = (id) => { Storage.deleteProjectData(id); setProjectList(prev => { const u = prev.filter(p => p.id!==id); Storage.saveProjectList(u); return u; }); };
             const goHome = () => {
-                if (currentProjectId && mainText) {
-                    Storage.saveProjectData(currentProjectId, { mainText, annotations });
-                    const updatedList = projectList.map(p => p.id === currentProjectId ? { ...p, updatedAt: Date.now(), annotationCount: annotations.length, preview: mainText.substring(0, 100) } : p);
-                    Storage.saveProjectList(updatedList);
-                    setProjectList(updatedList);
-                }
-                setAppMode('home');
-                setCurrentProjectId(null);
-                setMainText('');
-                setAnnotations([]);
-                setPanes([]);
-                setSelectionMenu({ show: false });
-                setTooltip({ show: false, text: '', top: 0, left: 0 });
+                if (currentProjectId && mainText) { Storage.saveProjectData(currentProjectId, { mainText, annotations }); const u = projectList.map(p => p.id===currentProjectId?{...p, updatedAt:Date.now(), annotationCount:annotations.length, preview:mainText.substring(0,100)}:p); Storage.saveProjectList(u); setProjectList(u); }
+                setAppMode('home'); setCurrentProjectId(null); setMainText(''); setAnnotations([]); setSelectedDocIndex(null); setPanes([]); setSelectionMenu({show:false}); setTooltip({show:false,text:'',top:0,left:0});
             };
 
             // --- エクスポート / インポート ---
-            const doExport = (projectIds) => {
-                const exportData = {
-                    type: 'annotator-export', version: 2, exportedAt: Date.now(),
-                    projects: projectIds.map(id => {
-                        const meta = projectList.find(p => p.id === id);
-                        const data = Storage.getProjectData(id);
-                        return { name: meta?.name || '名前なし', mainText: data?.mainText || '', annotations: data?.annotations || [], createdAt: meta?.createdAt, updatedAt: meta?.updatedAt };
-                    })
-                };
-                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a'); a.href = url; a.download = 'annotator-export-' + new Date().toISOString().slice(0, 10) + '.json';
-                document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+            const doExport = (ids) => {
+                const d = { type:'annotator-export', version:2, exportedAt:Date.now(), projects: ids.map(id => { const m=projectList.find(p=>p.id===id); const dt=Storage.getProjectData(id); return {name:m?.name||'',mainText:dt?.mainText||'',annotations:dt?.annotations||[],createdAt:m?.createdAt,updatedAt:m?.updatedAt}; }) };
+                const b = new Blob([JSON.stringify(d,null,2)],{type:'application/json'}); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href=u; a.download='annotator-export-'+new Date().toISOString().slice(0,10)+'.json'; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(u);
             };
-            const exportAllProjects = () => doExport(projectList.map(p => p.id));
-            const exportSingleProject = (id) => doExport([id]);
-
             const importProjects = (data) => {
-                if (!data || data.type !== 'annotator-export' || !Array.isArray(data.projects)) { alert('無効なファイル形式です。'); return; }
-                let count = 0;
-                const newList = [...projectList];
-                data.projects.forEach(proj => {
-                    const id = generateId();
-                    const now = Date.now();
-                    newList.unshift({ id, name: proj.name || '名前なし', createdAt: proj.createdAt || now, updatedAt: proj.updatedAt || now, annotationCount: (proj.annotations || []).length, preview: (proj.mainText || '').substring(0, 100) });
-                    Storage.saveProjectData(id, { mainText: proj.mainText || '', annotations: proj.annotations || [] });
-                    count++;
-                });
-                Storage.saveProjectList(newList);
-                setProjectList(newList);
-                alert(count + ' 件のまとめをインポートしました。');
+                if (!data||data.type!=='annotator-export'||!Array.isArray(data.projects)){alert('無効なファイル形式');return;}
+                let c=0; const nl=[...projectList];
+                data.projects.forEach(p=>{const id=generateId();const now=Date.now();nl.unshift({id,name:p.name||'',createdAt:p.createdAt||now,updatedAt:p.updatedAt||now,annotationCount:(p.annotations||[]).length,preview:(p.mainText||'').substring(0,100)});Storage.saveProjectData(id,{mainText:p.mainText||'',annotations:p.annotations||[]});c++;});
+                Storage.saveProjectList(nl); setProjectList(nl); alert(c+' 件インポートしました。');
             };
 
-            // --- テキスト / 注釈操作 ---
+            // --- テキスト保存 ---
             const handleSaveMainText = (name, text) => {
-                let id = currentProjectId;
-                const now = Date.now();
-                if (!id) {
-                    id = generateId();
-                    setProjectList(prev => { const updated = [{ id, name, createdAt: now, updatedAt: now, annotationCount: 0, preview: text.substring(0, 100) }, ...prev]; Storage.saveProjectList(updated); return updated; });
-                } else {
-                    setProjectList(prev => { const updated = prev.map(p => p.id === id ? { ...p, name, updatedAt: now, preview: text.substring(0, 100) } : p); Storage.saveProjectList(updated); return updated; });
-                }
-                setCurrentProjectId(id);
-                setCurrentProjectName(name);
-                setMainText(text);
+                let id = currentProjectId; const now = Date.now();
+                if (!id) { id = generateId(); setProjectList(prev => { const u = [{id,name,createdAt:now,updatedAt:now,annotationCount:0,preview:text.substring(0,100)},...prev]; Storage.saveProjectList(u); return u; }); }
+                else { setProjectList(prev => { const u = prev.map(p=>p.id===id?{...p,name,updatedAt:now,preview:text.substring(0,100)}:p); Storage.saveProjectList(u); return u; }); }
+                setCurrentProjectId(id); setCurrentProjectName(name); setMainText(text);
                 Storage.saveProjectData(id, { mainText: text, annotations });
-                setAppMode('workspace');
-                setPanes([]);
+                setSelectedDocIndex(null); setPanes([]); setAppMode('workspace');
             };
 
             const handleResetAnnotations = () => {
-                if (confirm('このまとめの注釈をすべて削除します。よろしいですか？')) {
-                    setAnnotations([]);
-                    if (currentProjectId) {
-                        Storage.saveProjectData(currentProjectId, { mainText, annotations: [] });
-                        setProjectList(prev => { const updated = prev.map(p => p.id === currentProjectId ? { ...p, annotationCount: 0, updatedAt: Date.now() } : p); Storage.saveProjectList(updated); return updated; });
-                    }
-                    setPanes(panes.length > 0 && panes[0].type === 'section' ? [panes[0]] : []);
-                }
+                if (!confirm('注釈をすべて削除しますか？')) return;
+                setAnnotations([]);
+                if (currentProjectId) { Storage.saveProjectData(currentProjectId,{mainText,annotations:[]}); setProjectList(prev=>{const u=prev.map(p=>p.id===currentProjectId?{...p,annotationCount:0,updatedAt:Date.now()}:p);Storage.saveProjectList(u);return u;}); }
+                setPanes(panes.length>0 && panes[0].type==='section' ? [panes[0]] : []);
+            };
+
+            // --- ドキュメント選択 ---
+            const selectDoc = (docIdx) => {
+                setSelectedDocIndex(docIdx);
+                setPanes([]);
+                setSelectionMenu({show:false}); setTooltip({show:false,text:'',top:0,left:0});
             };
 
             // --- セクション選択 ---
-            const selectSection = (sectionIndex) => {
-                setPanes([{ id: generateId(), type: 'section', sectionIndex }]);
-                setSelectionMenu({ show: false });
-                setTooltip({ show: false, text: '', top: 0, left: 0 });
-                setAnnotationPicker({ ...annotationPicker, show: false });
+            const selectSection = (secIdx) => {
+                setPanes([{ id: generateId(), type: 'section', sectionIndex: secIdx }]);
+                setSelectionMenu({show:false}); setTooltip({show:false,text:'',top:0,left:0});
+                setAnnotationPicker({...annotationPicker, show:false});
             };
 
-            // --- ワークスペースの最初のセクションを自動選択 ---
+            // --- 初回自動選択 ---
+            useEffect(() => {
+                if (appMode === 'workspace' && documents.length > 0 && selectedDocIndex === null) {
+                    setSelectedDocIndex(0);
+                }
+            }, [appMode, documents.length]);
+
             useEffect(() => {
                 if (appMode === 'workspace' && sections.length > 0 && panes.length === 0) {
                     setPanes([{ id: generateId(), type: 'section', sectionIndex: 0 }]);
                 }
-            }, [appMode, sections.length]);
+            }, [appMode, sections.length, selectedDocIndex]);
 
             // --- ペイン操作 ---
             const openAnnotationAtIndex = (paneIndex, annotationId) => {
-                setPanes(prev => [
-                    ...prev.slice(0, paneIndex + 1),
-                    { id: generateId(), type: 'annotation', annotationId }
-                ]);
+                setPanes(prev => [...prev.slice(0, paneIndex + 1), { id: generateId(), type: 'annotation', annotationId }]);
             };
-
             const startAddAnnotation = (paneIndex, targetId, quote) => {
-                setPanes(prev => [
-                    ...prev.slice(0, paneIndex + 1),
-                    { id: generateId(), type: 'add', targetId, quote }
-                ]);
+                setPanes(prev => [...prev.slice(0, paneIndex + 1), { id: generateId(), type: 'add', targetId, quote }]);
             };
-
             const saveNewAnnotation = (paneIndex, targetId, quote, title, content) => {
-                const newAnno = { id: generateId(), targetId, quote, title, content, timestamp: Date.now() };
-                setAnnotations(prev => [...prev, newAnno]);
-                setPanes(prev => {
-                    const newPanes = [...prev];
-                    newPanes[paneIndex] = { id: generateId(), type: 'annotation', annotationId: newAnno.id };
-                    return newPanes;
-                });
+                const na = { id: generateId(), targetId, quote, title, content, timestamp: Date.now() };
+                setAnnotations(prev => [...prev, na]);
+                setPanes(prev => { const n=[...prev]; n[paneIndex]={id:generateId(),type:'annotation',annotationId:na.id}; return n; });
                 window.getSelection().removeAllRanges();
             };
-
             const updateAnnotation = (paneIndex, annotationId, title, content) => {
-                setAnnotations(prev => prev.map(a => a.id === annotationId ? { ...a, title, content, timestamp: Date.now() } : a));
-                setPanes(prev => { const n = [...prev]; n[paneIndex] = { ...n[paneIndex], type: 'annotation' }; return n; });
+                setAnnotations(prev => prev.map(a => a.id===annotationId ? {...a, title, content, timestamp:Date.now()} : a));
+                setPanes(prev => { const n=[...prev]; n[paneIndex]={...n[paneIndex],type:'annotation'}; return n; });
             };
-
             const handleDeleteAnnotation = (id) => {
-                const idsToDelete = new Set([id]);
-                let added = true;
-                while(added) { added = false; annotations.forEach(a => { if (idsToDelete.has(a.targetId) && !idsToDelete.has(a.id)) { idsToDelete.add(a.id); added = true; } }); }
-                setAnnotations(prev => prev.filter(a => !idsToDelete.has(a.id)));
-                setPanes(prev => {
-                    const targetIndex = prev.findIndex(p => p.annotationId === id);
-                    return targetIndex !== -1 ? prev.slice(0, targetIndex) : prev;
-                });
+                const del = new Set([id]); let added=true;
+                while(added){added=false;annotations.forEach(a=>{if(del.has(a.targetId)&&!del.has(a.id)){del.add(a.id);added=true;}});}
+                setAnnotations(prev=>prev.filter(a=>!del.has(a.id)));
+                setPanes(prev=>{const i=prev.findIndex(p=>p.annotationId===id);return i!==-1?prev.slice(0,i):prev;});
             };
 
-            // --- テキスト選択 / ポップアップ ---
+            // --- テキスト選択 ---
             const handleMouseUp = (e, paneIndex, targetId) => {
                 setTimeout(() => {
-                    const selection = window.getSelection();
-                    const plainText = selection.toString().trim();
-                    if (plainText.length >= 2 && selection.rangeCount > 0) {
-                        const range = selection.getRangeAt(0);
-                        const rect = range.getBoundingClientRect();
+                    const sel = window.getSelection(); const pt = sel.toString().trim();
+                    if (pt.length >= 2 && sel.rangeCount > 0) {
+                        const range = sel.getRangeAt(0); const rect = range.getBoundingClientRect();
                         const quote = getQuoteFromSelection(range);
-                        setSelectionMenu({ show: true, top: Math.max(10, rect.top - 45), left: rect.left + (rect.width / 2), text: quote || plainText, paneIndex, targetId });
-                    } else {
-                        setSelectionMenu({ show: false });
-                    }
+                        setSelectionMenu({ show:true, top:Math.max(10,rect.top-45), left:rect.left+(rect.width/2), text:quote||pt, paneIndex, targetId });
+                    } else { setSelectionMenu({show:false}); }
                 }, 10);
             };
+            const handleScroll = () => { if (selectionMenu.show) setSelectionMenu({show:false}); if (tooltip.show) setTooltip({show:false}); if (annotationPicker.show) setAnnotationPicker(p=>({...p,show:false})); };
+            const handleMultiMarkClick = (pi, ids, rect) => { setAnnotationPicker({show:true,annoIds:ids,top:rect.bottom+8,left:rect.left+rect.width/2,paneIndex:pi}); };
+            const handleMarkHover = (h, t, r) => { if (h&&r) setTooltip({show:true,text:t,top:r.top-8,left:r.left+(r.width/2)}); else setTooltip({show:false,text:'',top:0,left:0}); };
 
-            const handleScroll = () => {
-                if (selectionMenu.show) setSelectionMenu({ show: false });
-                if (tooltip.show) setTooltip({ show: false });
-                if (annotationPicker.show) setAnnotationPicker(p => ({ ...p, show: false }));
-            };
+            // --- ペインレンダリング ---
+            const renderPanes = () => panes.map((pane, index) => {
+                const nextPane = panes[index + 1];
+                const activeAnnoId = nextPane && (nextPane.type==='annotation'||nextPane.type==='edit') ? nextPane.annotationId : null;
 
-            const handleMultiMarkClick = (paneIndex, annoIds, rect) => {
-                setAnnotationPicker({ show: true, annoIds, top: rect.bottom + 8, left: rect.left + rect.width / 2, paneIndex });
-            };
-
-            const handleMarkHover = (isHovering, text, rect) => {
-                if (isHovering && rect) setTooltip({ show: true, text, top: rect.top - 8, left: rect.left + (rect.width / 2) });
-                else setTooltip({ show: false, text: '', top: 0, left: 0 });
-            };
-
-            // --- ペインのレンダリング ---
-            const renderPanes = () => {
-                return panes.map((pane, index) => {
-                    const nextPane = panes[index + 1];
-                    const activeAnnoId = nextPane && (nextPane.type === 'annotation' || nextPane.type === 'edit') ? nextPane.annotationId : null;
-
-                    // --- セクションペイン ---
-                    if (pane.type === 'section') {
-                        const section = sections[pane.sectionIndex];
-                        if (!section) return null;
-                        const sectionAnnos = annotations.filter(a => a.targetId === section.id);
-
-                        return (
-                            <div key={pane.id} className="w-[90vw] md:w-[50vw] lg:w-[45vw] shrink-0 h-full bg-white border-r border-gray-200 flex flex-col relative shadow-[4px_0_24px_rgba(0,0,0,0.06)] z-0 animate-slide-in-right">
-                                {/* ヘッダー */}
-                                <div className="p-4 border-b border-gray-100 bg-white flex items-center justify-between shrink-0 shadow-sm z-10">
-                                    <div className="flex items-center gap-3 overflow-hidden">
-                                        <span className="text-xs font-mono text-gray-400 bg-gray-100 px-2 py-1 rounded shrink-0">{String(pane.sectionIndex + 1).padStart(2, '0')}</span>
-                                        <h2 className="text-[15px] font-bold text-gray-700 truncate">{section.title}</h2>
-                                    </div>
-                                    <button onClick={() => setAppMode('setup')} className="text-sm text-gray-500 hover:text-blue-600 flex items-center gap-1 font-medium bg-gray-50 hover:bg-blue-50 px-3 py-1.5 rounded-md transition-colors shrink-0">
-                                        <i className="ph-bold ph-pencil-simple"></i> 原文を編集
-                                    </button>
+                if (pane.type === 'section') {
+                    const sec = sections[pane.sectionIndex];
+                    if (!sec) return null;
+                    const secAnnos = annotations.filter(a => a.targetId === sec.id);
+                    return (
+                        <div key={pane.id} className="w-[90vw] md:w-[50vw] lg:w-[45vw] shrink-0 h-full bg-white border-r border-gray-200 flex flex-col relative shadow-[4px_0_24px_rgba(0,0,0,0.06)] z-0 animate-slide-in-right">
+                            <div className="p-4 border-b border-gray-100 bg-white flex items-center justify-between shrink-0 shadow-sm z-10">
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                    <span className="text-xs font-mono text-gray-400 bg-gray-100 px-2 py-1 rounded shrink-0">{String(pane.sectionIndex+1).padStart(2,'0')}</span>
+                                    <h2 className="text-[15px] font-bold text-gray-700 truncate">{sec.title}</h2>
                                 </div>
-
-                                {/* 注釈リスト */}
-                                <AnnotationListBar
-                                    annotations={sectionAnnos}
-                                    activeAnnotationId={activeAnnoId}
-                                    onSelect={(id) => openAnnotationAtIndex(index, id)}
-                                />
-
-                                {/* コンテンツ */}
-                                <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth selection:bg-blue-200 relative" onMouseUp={(e) => handleMouseUp(e, index, section.id)} onScroll={handleScroll}>
-                                    <div className="max-w-3xl mx-auto pb-20">
-                                        <MarkdownViewer
-                                            content={section.content}
-                                            className="markdown-body"
-                                            annotations={sectionAnnos}
-                                            onMarkClick={(id) => openAnnotationAtIndex(index, id)}
-                                            onMultiMarkClick={(ids, rect) => handleMultiMarkClick(index, ids, rect)}
-                                            onMarkHover={handleMarkHover}
-                                            activeAnnotationId={activeAnnoId}
-                                        />
-                                    </div>
+                                <button onClick={() => setAppMode('setup')} className="text-sm text-gray-500 hover:text-blue-600 flex items-center gap-1 font-medium bg-gray-50 hover:bg-blue-50 px-3 py-1.5 rounded-md transition-colors shrink-0"><i className="ph-bold ph-pencil-simple"></i> 編集</button>
+                            </div>
+                            <AnnotationListBar annotations={secAnnos} activeAnnotationId={activeAnnoId} onSelect={(id) => openAnnotationAtIndex(index, id)} />
+                            <div className="flex-1 overflow-y-auto p-6 md:p-10 scroll-smooth selection:bg-blue-200 relative" onMouseUp={(e) => handleMouseUp(e, index, sec.id)} onScroll={handleScroll}>
+                                <div className="max-w-3xl mx-auto pb-20">
+                                    <MarkdownViewer content={sec.content} className="markdown-body" annotations={secAnnos} onMarkClick={(id) => openAnnotationAtIndex(index, id)} onMultiMarkClick={(ids,r) => handleMultiMarkClick(index,ids,r)} onMarkHover={handleMarkHover} activeAnnotationId={activeAnnoId} />
                                 </div>
                             </div>
-                        );
-                    }
+                        </div>
+                    );
+                }
 
-                    // --- 注釈ペイン ---
-                    if (pane.type === 'annotation') {
-                        const anno = annotations.find(a => a.id === pane.annotationId);
-                        if (!anno) return null;
-                        const childAnnos = annotations.filter(a => a.targetId === anno.id);
-
-                        return (
-                            <div key={pane.id} className="w-[90vw] md:w-[50vw] lg:w-[45vw] shrink-0 h-full bg-white border-r border-gray-200 flex flex-col relative shadow-[4px_0_24px_rgba(0,0,0,0.06)] animate-slide-in-right z-0">
-                                {/* ヘッダー */}
-                                <div className="p-4 border-b border-gray-200 bg-slate-50 flex items-center justify-between shrink-0 shadow-sm z-10">
-                                    <div className="flex items-center gap-2 overflow-hidden">
-                                        <i className="ph-fill ph-chat-teardrop-text text-blue-500 text-xl shrink-0"></i>
-                                        <h3 className="font-bold text-gray-800 text-lg truncate pr-4">{anno.title}</h3>
-                                    </div>
-                                    <div className="flex items-center gap-1 shrink-0">
-                                        <button onClick={() => setPanes(p => { const n = [...p]; n[index] = {...pane, type: 'edit'}; return n; })} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="編集"><i className="ph ph-pencil-simple text-lg"></i></button>
-                                        <button onClick={() => { if(confirm('削除しますか？派生する注釈もすべて消えます。')) handleDeleteAnnotation(anno.id); }} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除"><i className="ph ph-trash text-lg"></i></button>
-                                        <div className="w-px h-5 bg-gray-300 mx-1"></div>
-                                        <button onClick={() => setPanes(prev => prev.slice(0, index))} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors" title="閉じる"><i className="ph-bold ph-x text-lg"></i></button>
-                                    </div>
-                                </div>
-
-                                {/* 引用テキスト */}
-                                <div className="px-6 py-3 bg-yellow-50 border-b border-yellow-200/60 shrink-0">
-                                    <p className="text-xs text-yellow-700 font-bold mb-1 flex items-center gap-1"><i className="ph-bold ph-quotes"></i> 対象テキスト</p>
-                                    <p className="text-sm text-gray-700 italic leading-relaxed line-clamp-3">{anno.quote}</p>
-                                </div>
-
-                                {/* 子注釈リスト */}
-                                <AnnotationListBar
-                                    annotations={childAnnos}
-                                    activeAnnotationId={activeAnnoId}
-                                    onSelect={(id) => openAnnotationAtIndex(index, id)}
-                                />
-
-                                {/* コンテンツ */}
-                                <div className="flex-1 overflow-y-auto p-6 md:p-10 relative selection:bg-blue-200" onMouseUp={(e) => handleMouseUp(e, index, anno.id)} onScroll={handleScroll}>
-                                    <div className="max-w-3xl mx-auto pb-20">
-                                        <MarkdownViewer
-                                            content={anno.content}
-                                            annotations={childAnnos}
-                                            onMarkClick={(id) => openAnnotationAtIndex(index, id)}
-                                            onMultiMarkClick={(ids, rect) => handleMultiMarkClick(index, ids, rect)}
-                                            onMarkHover={handleMarkHover}
-                                            activeAnnotationId={activeAnnoId}
-                                        />
-                                    </div>
+                if (pane.type === 'annotation') {
+                    const anno = annotations.find(a => a.id === pane.annotationId);
+                    if (!anno) return null;
+                    const children = annotations.filter(a => a.targetId === anno.id);
+                    return (
+                        <div key={pane.id} className="w-[90vw] md:w-[50vw] lg:w-[45vw] shrink-0 h-full bg-white border-r border-gray-200 flex flex-col relative shadow-[4px_0_24px_rgba(0,0,0,0.06)] animate-slide-in-right z-0">
+                            <div className="p-4 border-b border-gray-200 bg-slate-50 flex items-center justify-between shrink-0 shadow-sm z-10">
+                                <div className="flex items-center gap-2 overflow-hidden"><i className="ph-fill ph-chat-teardrop-text text-blue-500 text-xl shrink-0"></i><h3 className="font-bold text-gray-800 text-lg truncate pr-4">{anno.title}</h3></div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                    <button onClick={() => setPanes(p=>{const n=[...p];n[index]={...pane,type:'edit'};return n;})} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100" title="編集"><i className="ph ph-pencil-simple text-lg"></i></button>
+                                    <button onClick={()=>{if(confirm('削除しますか？'))handleDeleteAnnotation(anno.id);}} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100" title="削除"><i className="ph ph-trash text-lg"></i></button>
+                                    <div className="w-px h-5 bg-gray-300 mx-1"></div>
+                                    <button onClick={()=>setPanes(prev=>prev.slice(0,index))} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-200" title="閉じる"><i className="ph-bold ph-x text-lg"></i></button>
                                 </div>
                             </div>
-                        );
-                    }
-
-                    // --- 追加 / 編集ペイン ---
-                    if (pane.type === 'add' || pane.type === 'edit') {
-                        const isAdd = pane.type === 'add';
-                        let parentTitle = '';
-                        if (isAdd) {
-                            if (pane.targetId.startsWith('section-')) {
-                                const sec = sections.find(s => s.id === pane.targetId);
-                                parentTitle = sec ? sec.title : '不明';
-                            } else {
-                                parentTitle = annotations.find(a => a.id === pane.targetId)?.title || '不明';
-                            }
-                        } else {
-                            const editAnno = annotations.find(a => a.id === pane.annotationId);
-                            if (editAnno?.targetId?.startsWith('section-')) {
-                                const sec = sections.find(s => s.id === editAnno.targetId);
-                                parentTitle = sec ? sec.title : '不明';
-                            } else {
-                                parentTitle = annotations.find(a => a.id === editAnno?.targetId)?.title || '不明';
-                            }
-                        }
-
-                        const initialData = isAdd ? null : annotations.find(a => a.id === pane.annotationId);
-                        const quote = isAdd ? pane.quote : initialData?.quote;
-
-                        return (
-                            <div key={pane.id} className="w-[90vw] md:w-[50vw] lg:w-[45vw] shrink-0 h-full bg-slate-50 border-r border-gray-200 flex flex-col relative shadow-[4px_0_24px_rgba(0,0,0,0.06)] z-0">
-                                <AnnotationForm
-                                    mode={pane.type}
-                                    quote={quote}
-                                    parentTitle={parentTitle}
-                                    initialData={initialData}
-                                    onSave={(title, content) => isAdd
-                                        ? saveNewAnnotation(index, pane.targetId, quote, title, content)
-                                        : updateAnnotation(index, pane.annotationId, title, content)
-                                    }
-                                    onCancel={() => {
-                                        if (isAdd) setPanes(prev => prev.slice(0, index));
-                                        else setPanes(p => { const n = [...p]; n[index] = {...pane, type: 'annotation'}; return n; });
-                                    }}
-                                />
+                            <div className="px-6 py-3 bg-yellow-50 border-b border-yellow-200/60 shrink-0">
+                                <p className="text-xs text-yellow-700 font-bold mb-1"><i className="ph-bold ph-quotes"></i> 対象テキスト</p>
+                                <p className="text-sm text-gray-700 italic leading-relaxed line-clamp-3">{anno.quote}</p>
                             </div>
-                        );
+                            <AnnotationListBar annotations={children} activeAnnotationId={activeAnnoId} onSelect={(id) => openAnnotationAtIndex(index, id)} />
+                            <div className="flex-1 overflow-y-auto p-6 md:p-10 relative selection:bg-blue-200" onMouseUp={(e) => handleMouseUp(e, index, anno.id)} onScroll={handleScroll}>
+                                <div className="max-w-3xl mx-auto pb-20">
+                                    <MarkdownViewer content={anno.content} annotations={children} onMarkClick={(id) => openAnnotationAtIndex(index, id)} onMultiMarkClick={(ids,r) => handleMultiMarkClick(index,ids,r)} onMarkHover={handleMarkHover} activeAnnotationId={activeAnnoId} />
+                                </div>
+                            </div>
+                        </div>
+                    );
+                }
+
+                if (pane.type === 'add' || pane.type === 'edit') {
+                    const isAdd = pane.type === 'add';
+                    let parentTitle = '';
+                    if (isAdd) {
+                        const sec = sections.find(s => s.id === pane.targetId);
+                        parentTitle = sec ? sec.title : (annotations.find(a => a.id === pane.targetId)?.title || '');
+                    } else {
+                        const ea = annotations.find(a => a.id === pane.annotationId);
+                        const sec = sections.find(s => s.id === ea?.targetId);
+                        parentTitle = sec ? sec.title : (annotations.find(a => a.id === ea?.targetId)?.title || '');
                     }
+                    const initialData = isAdd ? null : annotations.find(a => a.id === pane.annotationId);
+                    const quote = isAdd ? pane.quote : initialData?.quote;
+                    return (
+                        <div key={pane.id} className="w-[90vw] md:w-[50vw] lg:w-[45vw] shrink-0 h-full bg-slate-50 border-r border-gray-200 flex flex-col relative shadow-[4px_0_24px_rgba(0,0,0,0.06)] z-0">
+                            <AnnotationForm mode={pane.type} quote={quote} parentTitle={parentTitle} initialData={initialData}
+                                onSave={(t,c) => isAdd ? saveNewAnnotation(index,pane.targetId,quote,t,c) : updateAnnotation(index,pane.annotationId,t,c)}
+                                onCancel={() => { if(isAdd) setPanes(prev=>prev.slice(0,index)); else setPanes(p=>{const n=[...p];n[index]={...pane,type:'annotation'};return n;}); }}
+                            />
+                        </div>
+                    );
+                }
+                return null;
+            });
 
-                    return null;
-                });
-            };
-
-            // --- メインレンダリング ---
             return (
                 <div className="flex flex-col h-screen w-full bg-gray-50 overflow-hidden font-sans text-gray-900">
-                    {/* ヘッダー */}
                     <header className="h-14 bg-slate-900 text-white flex items-center px-6 shrink-0 z-30 shadow-md">
                         <div className="flex items-center gap-3">
-                            <div className="bg-blue-500 p-1.5 rounded text-white flex items-center justify-center shadow-lg shadow-blue-500/30 cursor-pointer hover:bg-blue-400 transition-colors" onClick={goHome} title="ホームに戻る">
-                                <i className="ph-bold ph-columns text-xl"></i>
-                            </div>
+                            <div className="bg-blue-500 p-1.5 rounded text-white flex items-center justify-center shadow-lg shadow-blue-500/30 cursor-pointer hover:bg-blue-400 transition-colors" onClick={goHome} title="ホーム"><i className="ph-bold ph-columns text-xl"></i></div>
                             <h1 className="font-bold text-lg tracking-wide cursor-pointer hover:text-blue-300 transition-colors" onClick={goHome}>
-                                Annotator
-                                <span className="hidden sm:inline-block text-slate-400 font-normal text-sm ml-2">| アウトラインナビゲーション版</span>
+                                Annotator<span className="hidden sm:inline-block text-slate-400 font-normal text-sm ml-2">| アウトラインナビゲーション版</span>
                             </h1>
-                            {appMode !== 'home' && currentProjectName && (
-                                <div className="hidden sm:flex items-center gap-2 ml-4">
-                                    <i className="ph ph-caret-right text-slate-600 text-sm"></i>
-                                    <span className="text-slate-300 text-sm font-medium truncate max-w-[300px]">{currentProjectName}</span>
-                                </div>
-                            )}
+                            {appMode !== 'home' && currentProjectName && <div className="hidden sm:flex items-center gap-2 ml-4"><i className="ph ph-caret-right text-slate-600 text-sm"></i><span className="text-slate-300 text-sm font-medium truncate max-w-[300px]">{currentProjectName}</span></div>}
                         </div>
                         <div className="ml-auto flex items-center gap-4">
-                            {appMode !== 'home' && <button onClick={goHome} className="text-slate-400 hover:text-white text-sm flex items-center gap-1.5 transition-colors font-medium"><i className="ph-bold ph-house"></i> ホーム</button>}
-                            {appMode === 'workspace' && <button onClick={handleResetAnnotations} className="text-slate-400 hover:text-red-400 text-sm flex items-center gap-1.5 transition-colors font-medium"><i className="ph-bold ph-trash"></i> 注釈リセット</button>}
+                            {appMode !== 'home' && <button onClick={goHome} className="text-slate-400 hover:text-white text-sm flex items-center gap-1.5 font-medium"><i className="ph-bold ph-house"></i> ホーム</button>}
+                            {appMode === 'workspace' && <button onClick={handleResetAnnotations} className="text-slate-400 hover:text-red-400 text-sm flex items-center gap-1.5 font-medium"><i className="ph-bold ph-trash"></i> 注釈リセット</button>}
                         </div>
                     </header>
 
-                    {/* メインエリア */}
-                    {appMode === 'home' && (
-                        <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onDelete={deleteProject} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImport={importProjects} />
-                    )}
-
-                    {appMode === 'setup' && (
-                        <SetupScreen initialName={currentProjectName} initialText={mainText} isNew={!currentProjectId} onSave={handleSaveMainText} onCancel={currentProjectId ? () => setAppMode('workspace') : (projectList.length > 0 ? () => setAppMode('home') : null)} />
-                    )}
+                    {appMode === 'home' && <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onDelete={deleteProject} onExportSingle={(id)=>doExport([id])} onExportAll={()=>doExport(projectList.map(p=>p.id))} onImport={importProjects} />}
+                    {appMode === 'setup' && <SetupScreen initialName={currentProjectName} initialText={mainText} isNew={!currentProjectId} onSave={handleSaveMainText} onCancel={currentProjectId ? ()=>setAppMode('workspace') : (projectList.length>0 ? ()=>setAppMode('home') : null)} />}
 
                     {appMode === 'workspace' && (
                         <div className="flex-1 flex overflow-hidden relative bg-gray-200">
                             {/* フローティングUI */}
                             {selectionMenu.show && (
-                                <div className="fixed z-[100] transform -translate-x-1/2 bg-slate-800 text-white px-3 py-2 rounded-lg shadow-xl flex items-center gap-3 animate-fade-in-up border border-slate-700" style={{ top: `${selectionMenu.top}px`, left: `${selectionMenu.left}px` }}>
+                                <div className="fixed z-[100] transform -translate-x-1/2 bg-slate-800 text-white px-3 py-2 rounded-lg shadow-xl flex items-center gap-3 animate-fade-in-up border border-slate-700" style={{top:`${selectionMenu.top}px`,left:`${selectionMenu.left}px`}}>
                                     <div className="text-xs text-gray-300 max-w-[150px] truncate hidden sm:block">"{selectionMenu.text}"</div>
                                     <div className="w-px h-4 bg-slate-600 hidden sm:block"></div>
-                                    <button className="text-sm font-bold text-blue-300 hover:text-blue-100 flex items-center gap-1.5 whitespace-nowrap" onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        startAddAnnotation(selectionMenu.paneIndex, selectionMenu.targetId, selectionMenu.text);
-                                        setSelectionMenu({ show: false });
-                                        window.getSelection().removeAllRanges();
-                                    }}>
+                                    <button className="text-sm font-bold text-blue-300 hover:text-blue-100 flex items-center gap-1.5 whitespace-nowrap" onMouseDown={(e) => { e.preventDefault(); startAddAnnotation(selectionMenu.paneIndex,selectionMenu.targetId,selectionMenu.text); setSelectionMenu({show:false}); window.getSelection().removeAllRanges(); }}>
                                         <i className="ph-bold ph-plus-circle text-lg"></i> 注釈を追加
                                     </button>
                                 </div>
                             )}
-
                             {tooltip.show && (
-                                <div className="fixed z-[110] transform -translate-x-1/2 -translate-y-full bg-slate-800 text-white px-3 py-1.5 rounded-md text-xs font-bold shadow-lg pointer-events-none max-w-[250px] break-words text-center" style={{ top: `${tooltip.top}px`, left: `${tooltip.left}px` }}>
-                                    {tooltip.text}
-                                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-[5px] border-transparent border-t-slate-800"></div>
+                                <div className="fixed z-[110] transform -translate-x-1/2 -translate-y-full bg-slate-800 text-white px-3 py-1.5 rounded-md text-xs font-bold shadow-lg pointer-events-none max-w-[250px] break-words text-center" style={{top:`${tooltip.top}px`,left:`${tooltip.left}px`}}>
+                                    {tooltip.text}<div className="absolute top-full left-1/2 transform -translate-x-1/2 border-[5px] border-transparent border-t-slate-800"></div>
                                 </div>
                             )}
-
                             {annotationPicker.show && (
                                 <React.Fragment>
-                                    <div className="fixed inset-0 z-[115]" onClick={() => setAnnotationPicker(p => ({ ...p, show: false }))}></div>
-                                    <div className="fixed z-[120] transform -translate-x-1/2 bg-white rounded-xl shadow-2xl border border-gray-200 animate-fade-in-up overflow-hidden min-w-[220px]" style={{ top: `${annotationPicker.top}px`, left: `${annotationPicker.left}px` }}>
+                                    <div className="fixed inset-0 z-[115]" onClick={()=>setAnnotationPicker(p=>({...p,show:false}))}></div>
+                                    <div className="fixed z-[120] transform -translate-x-1/2 bg-white rounded-xl shadow-2xl border border-gray-200 animate-fade-in-up overflow-hidden min-w-[220px]" style={{top:`${annotationPicker.top}px`,left:`${annotationPicker.left}px`}}>
                                         <div className="px-4 py-2 bg-gray-50 border-b border-gray-100"><p className="text-xs font-bold text-gray-500">複数の注釈があります</p></div>
-                                        <div className="py-1">
-                                            {annotationPicker.annoIds.map(id => {
-                                                const pickerAnno = annotations.find(a => a.id === id);
-                                                if (!pickerAnno) return null;
-                                                return (
-                                                    <button key={id} className="w-full text-left px-4 py-2.5 hover:bg-blue-50 flex items-center gap-2 transition-colors" onClick={() => { openAnnotationAtIndex(annotationPicker.paneIndex, id); setAnnotationPicker(p => ({ ...p, show: false })); }}>
-                                                        <i className="ph-fill ph-chat-teardrop-text text-blue-500 shrink-0"></i>
-                                                        <span className="text-sm font-medium text-gray-700 truncate">{pickerAnno.title}</span>
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
+                                        <div className="py-1">{annotationPicker.annoIds.map(id => { const a=annotations.find(x=>x.id===id); if(!a) return null; return (<button key={id} className="w-full text-left px-4 py-2.5 hover:bg-blue-50 flex items-center gap-2" onClick={()=>{openAnnotationAtIndex(annotationPicker.paneIndex,id);setAnnotationPicker(p=>({...p,show:false}));}}><i className="ph-fill ph-chat-teardrop-text text-blue-500 shrink-0"></i><span className="text-sm font-medium text-gray-700 truncate">{a.title}</span></button>); })}</div>
                                     </div>
                                 </React.Fragment>
                             )}
 
-                            {/* アウトラインサイドバー */}
-                            <DocumentOutline
-                                sections={sections}
-                                activeSectionIndex={activeSectionIndex}
-                                annotationCounts={annotationCounts}
-                                onSelectSection={selectSection}
-                            />
+                            {/* 左: ドキュメント一覧 */}
+                            <DocumentList documents={documents} activeDocIndex={selectedDocIndex} annotationCounts={docAnnotationCounts} onSelectDoc={selectDoc} />
 
-                            {/* ペインコンテナ */}
+                            {/* 左2: セクション目次 */}
+                            {selectedDoc && (
+                                <SectionOutline docTitle={selectedDoc.title} sections={sections} activeSectionIndex={activeSectionIndex} annotationCounts={annotationCounts} onSelectSection={selectSection} />
+                            )}
+
+                            {/* 右: ペインコンテナ */}
                             <div className="pane-scroll-container scroll-smooth" ref={scrollContainerRef}>
                                 {renderPanes()}
                             </div>
