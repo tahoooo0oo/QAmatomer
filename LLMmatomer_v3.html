@@ -530,6 +530,141 @@
             );
         };
 
+        // --- コンポーネント: 注釈ツリービュー ---
+        const AnnotationTreeView = ({ annotations, onNodeClick, openPaneIds }) => {
+            const [hoveredId, setHoveredId] = useState(null);
+            const [expandedIds, setExpandedIds] = useState(new Set(['main']));
+
+            // 注釈ツリーを構築
+            const buildTree = () => {
+                const byId = {};
+                const tree = [];
+
+                // IDごとに注釈をマッピング
+                annotations.forEach(a => {
+                    byId[a.id] = { ...a, children: [] };
+                });
+
+                // 親子関係を構築
+                annotations.forEach(a => {
+                    if (a.targetId === 'main') {
+                        tree.push(byId[a.id]);
+                    } else if (byId[a.targetId]) {
+                        byId[a.targetId].children.push(byId[a.id]);
+                    }
+                });
+
+                return tree;
+            };
+
+            const tree = buildTree();
+
+            // ノードをクリック → その注釈を開き、親構造も展開
+            const handleNodeClick = (annotation) => {
+                onNodeClick(annotation);
+
+                // 親チェーンを辿って、すべての親の ID を展開状態に追加
+                const newExpanded = new Set(expandedIds);
+                let currentId = annotation.targetId;
+                while (currentId !== 'main') {
+                    newExpanded.add(currentId);
+                    const parent = annotations.find(a => a.id === currentId);
+                    if (!parent) break;
+                    currentId = parent.targetId;
+                }
+                newExpanded.add(annotation.id); // ノード自身も展開
+                setExpandedIds(newExpanded);
+            };
+
+            // 展開/折りたたみを切り替え
+            const toggleExpanded = (id, e) => {
+                e.stopPropagation();
+                const newExpanded = new Set(expandedIds);
+                if (newExpanded.has(id)) {
+                    newExpanded.delete(id);
+                } else {
+                    newExpanded.add(id);
+                }
+                setExpandedIds(newExpanded);
+            };
+
+            // ツリーノードを再帰的にレンダリング
+            const renderNode = (anno, depth = 0) => {
+                const hasChildren = anno.children && anno.children.length > 0;
+                const isExpanded = expandedIds.has(anno.id);
+                const isOpen = openPaneIds.includes(anno.id);
+
+                return (
+                    <div key={anno.id} className="select-none">
+                        <div
+                            className={`flex items-center gap-2 px-3 py-2 rounded-md cursor-pointer transition-colors relative group ${
+                                isOpen
+                                    ? 'bg-blue-100 text-blue-900'
+                                    : hoveredId === anno.id
+                                    ? 'bg-gray-100'
+                                    : 'hover:bg-gray-50'
+                            }`}
+                            style={{ paddingLeft: `${depth * 16 + 12}px` }}
+                            onClick={() => handleNodeClick(anno)}
+                            onMouseEnter={() => setHoveredId(anno.id)}
+                            onMouseLeave={() => setHoveredId(null)}
+                        >
+                            {hasChildren && (
+                                <button
+                                    onClick={(e) => toggleExpanded(anno.id, e)}
+                                    className="w-4 h-4 flex items-center justify-center text-gray-500 hover:text-gray-700 flex-shrink-0"
+                                >
+                                    {isExpanded ? (
+                                        <i className="ph-bold ph-caret-down text-xs"></i>
+                                    ) : (
+                                        <i className="ph-bold ph-caret-right text-xs"></i>
+                                    )}
+                                </button>
+                            )}
+                            {!hasChildren && <div className="w-4"></div>}
+
+                            {/* ノード表示 */}
+                            <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium truncate">{anno.title}</div>
+                                {hoveredId === anno.id && (
+                                    <div className="absolute left-0 bottom-full mb-2 bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-50">
+                                        {anno.title}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* アイコン */}
+                            <div className="flex-shrink-0 flex items-center gap-1">
+                                {isOpen && (
+                                    <i className="ph-fill ph-check-circle text-blue-500 text-sm"></i>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* 子要素を表示 */}
+                        {hasChildren && isExpanded && (
+                            <div>
+                                {anno.children.map(child => renderNode(child, depth + 1))}
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            return (
+                <div className="flex-1 overflow-y-auto space-y-1">
+                    {tree.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full text-gray-400 p-4 text-center opacity-80">
+                            <i className="ph-fill ph-tree text-4xl mb-2"></i>
+                            <p className="text-sm">注釈がまだありません</p>
+                        </div>
+                    ) : (
+                        tree.map(node => renderNode(node))
+                    )}
+                </div>
+            );
+        };
+
         // --- コンポーネント: 主軸テキスト入力画面 ---
         const SetupScreen = ({ initialName, initialText, isNew, onSave, onCancel, editorScrollPosition }) => {
             const [name, setName] = useState(initialName || '');
@@ -1238,43 +1373,25 @@
                 });
 
                 if (panes.length === 1) {
-                    const mainAnnotations = annotations.filter(a => a.targetId === 'main');
+                    // 開いている注釈の ID を取得
+                    const openPaneIds = panes
+                        .filter(p => p.type === 'view' || p.type === 'edit')
+                        .map(p => p.annotationId)
+                        .filter(Boolean);
+
                     elements.push(
                         <div key="dummy-pane" className="w-[90vw] md:w-[50vw] lg:w-[45vw] shrink-0 h-full bg-slate-50 border-l border-gray-200 flex flex-col z-0">
                             <div className="p-4 border-b border-gray-200 bg-white shrink-0 shadow-sm z-10">
                                 <h3 className="font-bold text-gray-700 flex items-center gap-2">
-                                    <i className="ph-fill ph-list-bullets text-blue-500 text-xl"></i>
-                                    注釈一覧 ({mainAnnotations.length})
+                                    <i className="ph-fill ph-tree text-blue-500 text-xl"></i>
+                                    注釈ツリー ({annotations.length})
                                 </h3>
                             </div>
-                            <div className="flex-1 overflow-y-auto p-4 md:p-6">
-                                {mainAnnotations.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center h-full text-gray-400 p-8 text-center opacity-80">
-                                        <div className="w-20 h-20 bg-blue-100 text-blue-300 rounded-full flex items-center justify-center mb-5 shadow-inner">
-                                            <i className="ph-fill ph-text-highlighter text-4xl"></i>
-                                        </div>
-                                        <h3 className="text-xl font-bold text-gray-400 mb-2 tracking-wide">テキストを選択して注釈を追加</h3>
-                                        <p className="text-sm text-gray-400 max-w-xs leading-relaxed">
-                                            左の原文をドラッグして選択してください。作成した注釈はここに展開され、さらにその注釈の中にも注釈を作成し、無限に掘り下げていくことができます。
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-3 pb-6">
-                                        {mainAnnotations.map((anno) => (
-                                            <div
-                                                key={anno.id}
-                                                onClick={() => openAnnotation(0, anno.id)}
-                                                className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:border-blue-400 hover:shadow-md cursor-pointer transition-all relative"
-                                            >
-                                                <h4 className="font-bold text-gray-800 line-clamp-1 mb-2">{anno.title}</h4>
-                                                <p className="text-sm text-gray-500 line-clamp-2 bg-yellow-50 p-2 rounded border-l-2 border-yellow-400 italic">
-                                                    "{anno.quote}"
-                                                </p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                            <AnnotationTreeView
+                                annotations={annotations}
+                                onNodeClick={(anno) => openAnnotation(0, anno.id)}
+                                openPaneIds={openPaneIds}
+                            />
                         </div>
                     );
                 }
