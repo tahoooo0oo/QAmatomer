@@ -531,32 +531,22 @@
         };
 
         // --- コンポーネント: 主軸テキスト入力画面 ---
-        const SetupScreen = ({ initialName, initialText, isNew, onSave, onCancel, editorPosition }) => {
+        const SetupScreen = ({ initialName, initialText, isNew, onSave, onCancel, editorScrollPosition }) => {
             const [name, setName] = useState(initialName || '');
             const [text, setText] = useState(initialText || '');
             const textareaRef = useRef(null);
 
-            // editorPosition が設定されたら、カーソル位置を移動 + スクロール
+            // editorScrollPosition が設定されたら、スクロール位置を復元
             useEffect(() => {
-                if (editorPosition !== null && editorPosition !== undefined && textareaRef.current) {
+                if (editorScrollPosition !== null && editorScrollPosition !== undefined && textareaRef.current) {
                     const textarea = textareaRef.current;
                     setTimeout(() => {
                         textarea.focus();
-                        textarea.setSelectionRange(editorPosition, editorPosition);
-
-                        // カーソル位置に自動スクロール（改行数で計算）
-                        const textBeforePosition = text.substring(0, editorPosition);
-                        const lineCount = (textBeforePosition.match(/\n/g) || []).length;
-
-                        // 行高をコンピュートするか、推定値を使用
-                        const computedStyle = window.getComputedStyle(textarea);
-                        const lineHeight = parseFloat(computedStyle.lineHeight);
-                        const estimatedScrollTop = Math.max(0, lineCount * lineHeight - textarea.clientHeight / 2);
-
-                        textarea.scrollTop = estimatedScrollTop;
+                        // スクロール位置をそのまま適用
+                        textarea.scrollTop = editorScrollPosition;
                     }, 50);
                 }
-            }, [editorPosition, text]);
+            }, [editorScrollPosition]);
 
             return (
                 <div className="flex flex-col items-center justify-center h-[calc(100vh-56px)] bg-gray-50 p-6">
@@ -691,7 +681,7 @@
             const [selectionMenu, setSelectionMenu] = useState({ show: false, top: 0, left: 0, text: '', paneIndex: 0, targetId: 'main' });
             const [tooltip, setTooltip] = useState({ show: false, text: '', top: 0, left: 0 });
             const [annotationPicker, setAnnotationPicker] = useState({ show: false, annoIds: [], top: 0, left: 0, paneIndex: 0 });
-            const [editorPosition, setEditorPosition] = useState(null);
+            const [editorScrollPosition, setEditorScrollPosition] = useState(null);
 
             const scrollContainerRef = useRef(null);
 
@@ -935,53 +925,20 @@
                 }
             };
 
-            // クリック位置をテキスト内のオフセットに変換する共通関数
-            const calculateTextOffsetFromClick = (e) => {
-                const element = e.currentTarget;
-                let offset = 0;
-
-                try {
-                    // caretRangeFromPoint を使ってクリック位置のテキストオフセットを計算
-                    const range = document.caretRangeFromPoint(e.clientX, e.clientY);
-                    if (range) {
-                        // クリック位置までのテキストを全部数えて offset を計算
-                        const preRange = range.cloneRange();
-                        preRange.selectNodeContents(element);
-                        preRange.setEnd(range.endContainer, range.endOffset);
-                        const text = preRange.toString();
-                        offset = text.length - 1;
-                        offset = Math.max(0, Math.min(offset, mainText.length - 1));
-                    }
-                } catch (err) {
-                    // fallback: クリック位置のy座標から行を推定
-                    const rect = element.getBoundingClientRect();
-                    const relativeY = e.clientY - rect.top;
-                    const lineHeight = 24;
-                    const lineNumber = Math.floor(relativeY / lineHeight);
-
-                    const lines = mainText.split('\n');
-                    offset = 0;
-                    for (let i = 0; i < Math.min(lineNumber, lines.length); i++) {
-                        offset += lines[i].length + 1;
-                    }
-                    offset = Math.min(offset, mainText.length - 1);
-                }
-
-                return offset;
-            };
-
-            // 右クリック時: クリック位置をテキスト内のオフセットに変換
+            // 右クリック時: スクロール位置を保存
             const handleContextMenu = (e, paneIndex) => {
                 e.preventDefault();
-                const offset = calculateTextOffsetFromClick(e);
-                setEditorPosition(offset);
+                const element = e.currentTarget;
+                const scrollPosition = element.scrollTop;
+                setEditorScrollPosition(scrollPosition);
                 setAppMode('setup');
             };
 
-            // ダブルクリック時: クリック位置をテキスト内のオフセットに変換
+            // ダブルクリック時: スクロール位置を保存
             const handleDoubleClick = (e, paneIndex) => {
-                const offset = calculateTextOffsetFromClick(e);
-                setEditorPosition(offset);
+                const element = e.currentTarget;
+                const scrollPosition = element.scrollTop;
+                setEditorScrollPosition(scrollPosition);
                 setAppMode('setup');
             };
 
@@ -1381,8 +1338,8 @@
                             initialText={mainText}
                             isNew={!currentProjectId}
                             onSave={handleSaveMainText}
-                            onCancel={currentProjectId ? () => { setAppMode('workspace'); setEditorPosition(null); } : (projectList.length > 0 ? () => setAppMode('home') : null)}
-                            editorPosition={editorPosition}
+                            onCancel={currentProjectId ? () => { setAppMode('workspace'); setEditorScrollPosition(null); } : (projectList.length > 0 ? () => setAppMode('home') : null)}
+                            editorScrollPosition={editorScrollPosition}
                         />
                     )}
 
