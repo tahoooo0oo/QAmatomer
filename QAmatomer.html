@@ -461,7 +461,7 @@
 
         // --- ViewPane ---
         const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onOpenChild, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId }) => {
-            const [listCollapsed, setListCollapsed] = useState(false);
+            const [listCollapsed, setListCollapsed] = useState(!isRoot);
             const groupedChildren = {};
             const ungroupedChildren = [];
             node.children.forEach(childNode => {
@@ -679,8 +679,8 @@
         const AnnotationViewPane = ({ annotation, breadcrumb, childNodes, subAnnotations, activeAnnotationId, selectedChildId, onEdit, onDelete, onClose, onAddChild, onOpenChild, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu }) => {
             if (!annotation) return null;
 
-            const [quoteCollapsed, setQuoteCollapsed] = useState(false);
-            const [listCollapsed, setListCollapsed] = useState(false);
+            const [quoteCollapsed, setQuoteCollapsed] = useState(true);
+            const [listCollapsed, setListCollapsed] = useState(true);
 
             const handleMouseUp = () => {
                 setTimeout(() => {
