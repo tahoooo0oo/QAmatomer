@@ -135,6 +135,14 @@
                 try {
                     const data = JSON.parse(localStorage.getItem('annotator-qa-project-' + id) || 'null');
                     if (data && !data.annotations) data.annotations = [];
+                    if (data) {
+                        data.annotations = data.annotations.map(a => ({
+                            childNodeIds: [], parentAnnotationId: null, ...a
+                        }));
+                        Object.values(data.nodes || {}).forEach(n => {
+                            if (n.parentAnnotationId === undefined) n.parentAnnotationId = null;
+                        });
+                    }
                     return data;
                 } catch(e) { return null; }
             },
@@ -369,6 +377,7 @@
                 {path.map((item, idx) => (
                     <React.Fragment key={idx}>
                         {idx > 0 && <span className="text-gray-400 mx-1">›</span>}
+                        {item.isAnnotation && <i className="ph-fill ph-highlighter text-amber-400 mr-0.5"></i>}
                         <span className={`max-w-[120px] md:max-w-[200px] truncate ${item.isLast ? 'font-bold text-gray-800' : 'text-gray-500'}`} title={item.title}>{item.title}</span>
                     </React.Fragment>
                 ))}
@@ -591,16 +600,64 @@
         };
 
         // --- テキスト注釈ビューペイン ---
-        const AnnotationViewPane = ({ annotation, onEdit, onDelete, onClose }) => {
+        const AnnotationViewPane = ({ annotation, breadcrumb, childNodes, subAnnotations, activeAnnotationId, selectedChildId, onEdit, onDelete, onClose, onAddChild, onOpenChild, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu }) => {
             if (!annotation) return null;
+
+            const handleMouseUp = () => {
+                setTimeout(() => {
+                    const sel = window.getSelection();
+                    const text = sel?.toString().trim();
+                    if (text && text.length >= 2 && sel.rangeCount > 0) {
+                        const range = sel.getRangeAt(0);
+                        const rect = range.getBoundingClientRect();
+                        const quote = getQuoteFromSelection(range);
+                        onAnnotateText(annotation.id, quote || text, rect);
+                    }
+                }, 10);
+            };
+
+            const renderChildNode = (childNode) => {
+                const isChildSelected = selectedChildId === childNode.id;
+                return (
+                    <div key={childNode.id} onClick={() => onOpenChild(childNode.id)} className={`px-3 py-2 rounded-lg border transition-all cursor-pointer group bg-white ${isChildSelected ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-sm' : 'border-gray-200 hover:border-blue-300 hover:shadow-sm'}`}>
+                        <div className="font-medium text-gray-800 flex items-start gap-2 text-sm">
+                            <i className={`ph-fill ph-question mt-0.5 shrink-0 text-sm ${isChildSelected ? 'text-blue-600' : 'text-gray-300 group-hover:text-blue-400 transition-colors'}`}></i>
+                            <span className="leading-snug">{childNode.question}</span>
+                        </div>
+                    </div>
+                );
+            };
+
+            const renderSubAnnotationCard = (anno) => {
+                const isSelected = activeAnnotationId === anno.id;
+                return (
+                    <div key={anno.id} onClick={() => onAnnotationClick(anno.id)} className={`px-3 py-2 rounded-lg border transition-all cursor-pointer group bg-white ${isSelected ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-100 shadow-sm' : 'border-gray-200 hover:border-amber-300 hover:shadow-sm'}`}>
+                        <div className="font-medium text-gray-800 flex items-start gap-2 text-sm">
+                            <i className={`ph-fill ph-highlighter mt-0.5 shrink-0 text-sm ${isSelected ? 'text-amber-500' : 'text-amber-300 group-hover:text-amber-400 transition-colors'}`}></i>
+                            <div className="flex-1 min-w-0">
+                                <span className="leading-snug block">{anno.title}</span>
+                                {anno.quote && <span className="text-[11px] text-gray-400 truncate block">「{anno.quote.substring(0, 40)}{anno.quote.length > 40 ? '…' : '」'}</span>}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            const totalCount = (childNodes?.length || 0) + (subAnnotations?.length || 0);
+
             return (
                 <div className="flex flex-col h-full bg-white border-r border-gray-200 shrink-0 w-[90vw] md:w-[50vw] lg:w-[45vw] xl:w-[40vw] relative z-0 shadow-[4px_0_24px_rgba(0,0,0,0.06)] animate-slide-in-right">
+                    {breadcrumb.length > 0 && <BreadcrumbTrail path={breadcrumb} />}
                     <div className="p-4 border-b border-gray-100 bg-white flex items-start justify-between shrink-0 shadow-sm z-10">
                         <div className="flex items-start gap-3 overflow-hidden flex-1">
                             <i className="ph-fill ph-highlighter text-amber-500 text-2xl shrink-0 mt-0.5"></i>
                             <h2 className="font-bold text-gray-800 leading-snug text-lg">{annotation.title}</h2>
                         </div>
                         <div className="flex items-center gap-1 shrink-0 ml-2">
+                            <button onClick={onAddChild} className="px-2.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 hover:border-blue-300 transition-colors flex items-center gap-1" title="質問を追加">
+                                <i className="ph-bold ph-plus text-xs"></i><span className="hidden sm:inline">追加</span>
+                            </button>
+                            <div className="w-px h-5 bg-gray-200 mx-1"></div>
                             <button onClick={onEdit} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="編集"><i className="ph ph-pencil-simple text-lg"></i></button>
                             <button onClick={onDelete} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除"><i className="ph ph-trash text-lg"></i></button>
                             <div className="w-px h-5 bg-gray-300 mx-1"></div>
@@ -608,25 +665,53 @@
                         </div>
                     </div>
                     {/* 対象テキストパネル */}
-                    <div className="border-b border-gray-200 bg-gray-50 shrink-0">
-                        <div className="px-4 py-2 border-b border-gray-100">
+                    <div className="border-b border-gray-200 bg-amber-50 shrink-0">
+                        <div className="px-4 py-2 border-b border-amber-100">
                             <div className="text-xs text-amber-600 font-bold flex items-center gap-1 uppercase tracking-wider">
                                 <i className="ph-bold ph-quotes text-sm"></i> 対象テキスト
                                 {annotation.group && <span className="ml-2 text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium"><i className="ph-fill ph-folder-notch mr-0.5"></i>{annotation.group}</span>}
                             </div>
                         </div>
                         <div className="px-4 py-3">
-                            <p className="text-sm text-gray-700 italic leading-relaxed bg-amber-50 p-3 rounded border-l-2 border-amber-400">{annotation.quote}</p>
+                            <p className="text-sm text-gray-700 italic leading-relaxed bg-white p-3 rounded border-l-2 border-amber-400">{annotation.quote}</p>
+                        </div>
+                    </div>
+                    {/* 注釈・派生する質問パネル */}
+                    <div className="border-b border-gray-200 bg-gray-50 shrink-0 flex flex-col">
+                        <div className="px-4 py-2 border-b border-gray-100 shrink-0">
+                            <div className="text-xs text-gray-500 font-bold flex items-center gap-1 uppercase tracking-wider">
+                                <i className="ph-bold ph-list-dashes text-sm"></i>
+                                注釈・派生する質問 ({totalCount})
+                            </div>
+                        </div>
+                        <div className="overflow-y-auto max-h-[18vh]" onScroll={onHideSelectionMenu}>
+                            <div className="p-3 space-y-1.5">
+                                {totalCount === 0 ? (
+                                    <div className="text-center py-3 opacity-60 bg-white rounded-lg border border-dashed border-gray-300 flex flex-col items-center justify-center min-h-[48px]">
+                                        <i className="ph-fill ph-tree-structure text-xl text-gray-300 mb-1"></i>
+                                        <p className="text-xs text-gray-400">まだ派生する質問はありません</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        {childNodes?.map(childNode => renderChildNode(childNode))}
+                                        {childNodes?.length > 0 && subAnnotations?.length > 0 && <div className="border-t border-gray-200 mt-1 pt-1"></div>}
+                                        {subAnnotations?.map(a => renderSubAnnotationCard(a))}
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
                     {/* 解説パネル */}
-                    <div className="flex-1 overflow-y-auto bg-white">
+                    <div className="flex-1 overflow-y-auto bg-white" onScroll={onHideSelectionMenu}>
                         <div className="p-6 md:p-8">
-                            <div className="text-xs text-green-600 font-bold flex items-center gap-1 uppercase tracking-wider mb-3">
-                                <i className="ph-fill ph-check-circle text-sm"></i> 解説
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="text-xs text-green-600 font-bold flex items-center gap-1 uppercase tracking-wider">
+                                    <i className="ph-fill ph-check-circle text-sm"></i> 解説
+                                </div>
+                                <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded">テキストを選択→注釈を追加</span>
                             </div>
-                            <div className="max-w-3xl mx-auto pb-20">
-                                <MarkdownViewer content={annotation.content} />
+                            <div onMouseUp={handleMouseUp} className="selection:bg-blue-200">
+                                <MarkdownViewer content={annotation.content} annotations={subAnnotations || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} />
                             </div>
                         </div>
                     </div>
@@ -769,16 +854,19 @@
                 delete nodesObj[nodeId];
             };
 
-            const handleSaveNode = (paneIndex, type, idOrParentId, question, answer, group = '') => {
+            const handleSaveNode = (paneIndex, type, idOrParentId, parentAnnotationId, question, answer, group = '') => {
                 if (type === 'add') {
                     const newNodeId = generateId();
                     const parentId = idOrParentId;
                     setNodes(prev => {
                         const next = { ...prev };
-                        next[newNodeId] = { id: newNodeId, parentId, question, answer, group, children: [] };
-                        next[parentId] = { ...next[parentId], children: [...next[parentId].children, newNodeId] };
+                        next[newNodeId] = { id: newNodeId, parentId: parentId || null, parentAnnotationId: parentAnnotationId || null, question, answer, group, children: [] };
+                        if (parentId && next[parentId]) next[parentId] = { ...next[parentId], children: [...next[parentId].children, newNodeId] };
                         return next;
                     });
+                    if (parentAnnotationId) {
+                        setAnnotations(prev => prev.map(a => a.id === parentAnnotationId ? { ...a, childNodeIds: [...(a.childNodeIds || []), newNodeId] } : a));
+                    }
                     setPanes(prev => { const next = [...prev]; next[paneIndex] = { type: 'view', nodeId: newNodeId }; return next; });
                 } else {
                     const nodeId = idOrParentId;
@@ -788,7 +876,7 @@
                 }
             };
 
-            const handleDeleteNode = (paneIndex, nodeId, parentId) => {
+            const handleDeleteNode = (paneIndex, nodeId, parentId, parentAnnotationId) => {
                 if (nodeId === 'root') return;
                 if (!confirm('この質問と、そこから派生するすべての回答・質問を削除します。よろしいですか？')) return;
                 // 関連するテキスト注釈も削除
@@ -799,6 +887,9 @@
                 };
                 collectIds(nodeId);
                 setAnnotations(prev => prev.filter(a => !nodeIds.has(a.nodeId)));
+                if (parentAnnotationId) {
+                    setAnnotations(prev => prev.map(a => a.id === parentAnnotationId ? { ...a, childNodeIds: (a.childNodeIds || []).filter(id => id !== nodeId) } : a));
+                }
                 setNodes(prev => {
                     const next = { ...prev };
                     if (parentId && next[parentId]) next[parentId] = { ...next[parentId], children: next[parentId].children.filter(id => id !== nodeId) };
@@ -809,26 +900,30 @@
             };
 
             // --- テキスト注釈操作 ---
-            const handleAnnotateText = (nodeId, quote, rect) => {
+            // nodeId: 注釈元がノードの回答の場合, parentAnnotationId: 注釈元が注釈の解説の場合
+            const handleAnnotateText = (nodeId, parentAnnotationId, quote, rect) => {
                 const top = Math.max(10, rect.top - 50);
                 const left = rect.left + rect.width / 2;
-                setSelectionMenu({ show: true, top, left, text: quote, nodeId, paneIndex: panes.findIndex(p => p.type === 'view' && p.nodeId === nodeId) });
+                const paneIndex = nodeId
+                    ? panes.findIndex(p => p.type === 'view' && p.nodeId === nodeId)
+                    : panes.findIndex(p => p.type === 'annotation' && p.annotationId === parentAnnotationId);
+                setSelectionMenu({ show: true, top, left, text: quote, nodeId, parentAnnotationId, paneIndex });
             };
 
             const hideSelectionMenu = () => { setSelectionMenu({ show: false }); };
 
-            const startAnnotationAdd = (paneIndex, nodeId, quote) => {
+            const startAnnotationAdd = (paneIndex, nodeId, parentAnnotationId, quote) => {
                 setPanes(prev => {
                     const next = prev.slice(0, paneIndex + 1);
-                    next.push({ type: 'annotation-add', nodeId, quote });
+                    next.push({ type: 'annotation-add', nodeId, parentAnnotationId, quote });
                     return next;
                 });
                 setSelectionMenu({ show: false });
                 window.getSelection()?.removeAllRanges();
             };
 
-            const saveAnnotation = (paneIndex, nodeId, quote, title, content, group) => {
-                const na = { id: generateId(), nodeId, quote, title, content, group: group?.trim() || '', timestamp: Date.now() };
+            const saveAnnotation = (paneIndex, nodeId, parentAnnotationId, quote, title, content, group) => {
+                const na = { id: generateId(), nodeId: nodeId || null, parentAnnotationId: parentAnnotationId || null, quote, title, content, group: group?.trim() || '', timestamp: Date.now(), childNodeIds: [] };
                 setAnnotations(prev => [...prev, na]);
                 setPanes(prev => { const next = [...prev]; next[paneIndex] = { type: 'annotation', annotationId: na.id }; return next; });
                 window.getSelection()?.removeAllRanges();
@@ -841,7 +936,17 @@
 
             const handleDeleteAnnotation = (paneIndex, annotationId) => {
                 if (!confirm('この注釈を削除しますか？')) return;
-                setAnnotations(prev => prev.filter(a => a.id !== annotationId));
+                // 子ノードを再帰削除
+                const anno = annotations.find(a => a.id === annotationId);
+                if (anno?.childNodeIds?.length > 0) {
+                    const nodeIdsToDelete = new Set();
+                    const collectNodeIds = (nid) => { nodeIdsToDelete.add(nid); const n = nodes[nid]; if (n) n.children.forEach(cid => collectNodeIds(cid)); };
+                    anno.childNodeIds.forEach(nid => collectNodeIds(nid));
+                    setNodes(prev => { const next = { ...prev }; nodeIdsToDelete.forEach(nid => deleteNodeRecursive(nid, next)); return next; });
+                    setAnnotations(prev => prev.filter(a => a.id !== annotationId && a.parentAnnotationId !== annotationId && !nodeIdsToDelete.has(a.nodeId)));
+                } else {
+                    setAnnotations(prev => prev.filter(a => a.id !== annotationId && a.parentAnnotationId !== annotationId));
+                }
                 setPanes(prev => prev.slice(0, paneIndex));
             };
 
@@ -858,10 +963,14 @@
                 const path = [];
                 for (let i = 0; i <= paneIndex; i++) {
                     const p = panes[i];
-                    let nodeId = p.nodeId || p.parentId;
-                    if (!nodeId && p.type === 'add') nodeId = p.parentId;
-                    const node = nodes[nodeId];
-                    if (node) path.push({ title: node.question, isLast: i === paneIndex });
+                    if (p.type === 'annotation') {
+                        const anno = annotations.find(a => a.id === p.annotationId);
+                        if (anno) path.push({ title: anno.title, isLast: i === paneIndex, isAnnotation: true });
+                    } else {
+                        let nodeId = p.nodeId || p.parentId;
+                        const node = nodes[nodeId];
+                        if (node) path.push({ title: node.question, isLast: i === paneIndex });
+                    }
                 }
                 return path;
             };
@@ -941,7 +1050,7 @@
                                     <div className="text-xs text-gray-300 max-w-[160px] truncate hidden sm:block">"{selectionMenu.text}"</div>
                                     <div className="w-px h-4 bg-slate-600 hidden sm:block"></div>
                                     <button className="text-sm font-bold text-amber-300 hover:text-amber-100 flex items-center gap-1.5 whitespace-nowrap"
-                                        onMouseDown={(e) => { e.preventDefault(); startAnnotationAdd(selectionMenu.paneIndex, selectionMenu.nodeId, selectionMenu.text); }}>
+                                        onMouseDown={(e) => { e.preventDefault(); startAnnotationAdd(selectionMenu.paneIndex, selectionMenu.nodeId, selectionMenu.parentAnnotationId, selectionMenu.text); }}>
                                         <i className="ph-bold ph-highlighter text-lg"></i> 注釈を追加
                                     </button>
                                     <button className="text-slate-500 hover:text-slate-300 ml-1" onMouseDown={(e) => { e.preventDefault(); hideSelectionMenu(); }}>
@@ -982,7 +1091,7 @@
                                                 selectedChildId={selectedChildId}
                                                 nodeAnnotations={nodeAnnotations}
                                                 activeAnnotationId={activeAnnotationId}
-                                                onAnnotateText={(nodeId, quote, rect) => handleAnnotateText(nodeId, quote, rect)}
+                                                onAnnotateText={(nodeId, quote, rect) => handleAnnotateText(nodeId, null, quote, rect)}
                                                 onAnnotationClick={(annotationId) => openAnnotation(index, annotationId)}
                                                 onMarkHover={(h, t, r) => { if (h && r) setTooltip({ show: true, text: t, top: r.top - 8, left: r.left + r.width / 2 }); else setTooltip({ show: false }); }}
                                                 onHideSelectionMenu={hideSelectionMenu}
@@ -990,9 +1099,9 @@
                                                     if (pane.nodeId === 'root') { setAppMode('setup'); }
                                                     else { setPanes(prev => { const n = [...prev]; n[index] = { type: 'edit', nodeId: pane.nodeId }; return n; }); }
                                                 }}
-                                                onDelete={() => handleDeleteNode(index, pane.nodeId, node.parentId)}
+                                                onDelete={() => handleDeleteNode(index, pane.nodeId, node.parentId, node.parentAnnotationId)}
                                                 onClose={() => setPanes(prev => prev.slice(0, index))}
-                                                onAddChild={() => { setPanes(prev => { const next = prev.slice(0, index + 1); next.push({ type: 'add', parentId: pane.nodeId }); return next; }); }}
+                                                onAddChild={() => { setPanes(prev => { const next = prev.slice(0, index + 1); next.push({ type: 'add', parentId: pane.nodeId, parentAnnotationId: null }); return next; }); }}
                                                 onOpenChild={(childId) => { setPanes(prev => { const next = prev.slice(0, index + 1); next.push({ type: 'view', nodeId: childId }); return next; }); }}
                                             />
                                         );
@@ -1001,7 +1110,7 @@
                                     if (pane.type === 'add' || pane.type === 'edit') {
                                         const isAdd = pane.type === 'add';
                                         const node = isAdd ? null : nodes[pane.nodeId];
-                                        const isTopLevel = isAdd ? pane.parentId === 'root' : false;
+                                        const isTopLevel = isAdd ? pane.parentId === 'root' && !pane.parentAnnotationId : false;
                                         const existingGroups = Array.from(new Set(Object.values(nodes).map(n => n.group?.trim()).filter(Boolean)));
                                         return (
                                             <EditPane
@@ -1013,7 +1122,7 @@
                                                 initialGroup={node?.group || ''}
                                                 breadcrumb={breadcrumb}
                                                 existingGroups={existingGroups}
-                                                onSave={(q, a, g) => handleSaveNode(index, pane.type, isAdd ? pane.parentId : pane.nodeId, q, a, g)}
+                                                onSave={(q, a, g) => handleSaveNode(index, pane.type, isAdd ? pane.parentId : pane.nodeId, isAdd ? (pane.parentAnnotationId || null) : null, q, a, g)}
                                                 onCancel={() => {
                                                     if (isAdd) setPanes(prev => prev.slice(0, index));
                                                     else setPanes(prev => { const n = [...prev]; n[index] = { type: 'view', nodeId: pane.nodeId }; return n; });
@@ -1025,13 +1134,30 @@
                                     if (pane.type === 'annotation') {
                                         const annotation = annotations.find(a => a.id === pane.annotationId);
                                         if (!annotation) return null;
+                                        const nextPane = panes[index + 1];
+                                        const selectedChildId = nextPane ? (nextPane.nodeId || null) : null;
+                                        const childNodes = (annotation.childNodeIds || []).map(id => nodes[id]).filter(Boolean);
+                                        const subAnnotations = annotations.filter(a => a.parentAnnotationId === pane.annotationId);
+                                        const activeAnnotationId = nextPane && nextPane.type === 'annotation' ? nextPane.annotationId :
+                                            nextPane && nextPane.type === 'annotation-edit' ? nextPane.annotationId : null;
                                         return (
                                             <AnnotationViewPane
                                                 key={`pane-${index}-annotation-${pane.annotationId}`}
                                                 annotation={annotation}
+                                                breadcrumb={breadcrumb}
+                                                childNodes={childNodes}
+                                                subAnnotations={subAnnotations}
+                                                activeAnnotationId={activeAnnotationId}
+                                                selectedChildId={selectedChildId}
                                                 onEdit={() => setPanes(prev => { const n = [...prev]; n[index] = { type: 'annotation-edit', annotationId: pane.annotationId }; return n; })}
                                                 onDelete={() => handleDeleteAnnotation(index, pane.annotationId)}
                                                 onClose={() => setPanes(prev => prev.slice(0, index))}
+                                                onAddChild={() => { setPanes(prev => { const next = prev.slice(0, index + 1); next.push({ type: 'add', parentId: null, parentAnnotationId: pane.annotationId }); return next; }); }}
+                                                onOpenChild={(childId) => { setPanes(prev => { const next = prev.slice(0, index + 1); next.push({ type: 'view', nodeId: childId }); return next; }); }}
+                                                onAnnotateText={(annotationId, quote, rect) => handleAnnotateText(null, annotationId, quote, rect)}
+                                                onAnnotationClick={(annotationId) => openAnnotation(index, annotationId)}
+                                                onMarkHover={(h, t, r) => { if (h && r) setTooltip({ show: true, text: t, top: r.top - 8, left: r.left + r.width / 2 }); else setTooltip({ show: false }); }}
+                                                onHideSelectionMenu={hideSelectionMenu}
                                             />
                                         );
                                     }
@@ -1044,7 +1170,7 @@
                                                 mode="add"
                                                 quote={pane.quote}
                                                 existingAnnotationGroups={existingAnnotationGroups}
-                                                onSave={(title, content, group) => saveAnnotation(index, pane.nodeId, pane.quote, title, content, group)}
+                                                onSave={(title, content, group) => saveAnnotation(index, pane.nodeId, pane.parentAnnotationId, pane.quote, title, content, group)}
                                                 onCancel={() => setPanes(prev => prev.slice(0, index))}
                                             />
                                         );
