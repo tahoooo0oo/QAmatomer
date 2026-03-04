@@ -410,8 +410,57 @@
         };
 
 
+        // --- ツリーナビゲーション ノードアイテム (再帰) ---
+        const TreeNodeItem = ({ node, level, nodes, annotations, expandedIds, onToggle, onSelectNode, onSelectAnnotation, activeNodeIds, activeAnnotationId }) => {
+            const isExpanded = expandedIds.has(node.id);
+            const isActive = activeNodeIds.has(node.id);
+            const children = node.children.map(id => nodes[id]).filter(Boolean);
+            const nodeAnnotations = annotations.filter(a => a.nodeId === node.id);
+            const hasItems = children.length > 0 || nodeAnnotations.length > 0;
+            const pl = 8 + level * 14;
+
+            return (
+                <div>
+                    <div
+                        onClick={() => { onToggle(node.id); onSelectNode(node.id); }}
+                        style={{ paddingLeft: `${pl}px` }}
+                        className={`flex items-center gap-1 py-1.5 pr-2 rounded-md cursor-pointer transition-colors text-xs ${isActive ? 'bg-blue-100 text-blue-800 font-bold' : 'hover:bg-gray-100 text-gray-700'}`}
+                    >
+                        <span className="w-3 shrink-0 flex items-center justify-center">
+                            {hasItems && <i className={`ph-bold ph-caret-${isExpanded ? 'down' : 'right'} text-[9px] ${isActive ? 'text-blue-500' : 'text-gray-400'}`}></i>}
+                        </span>
+                        <i className={`ph-fill ph-question text-[10px] shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-300'}`}></i>
+                        <span className="truncate leading-snug">{node.question}</span>
+                    </div>
+                    {isExpanded && (
+                        <>
+                            {children.map(child => (
+                                <TreeNodeItem key={child.id} node={child} level={level + 1} nodes={nodes} annotations={annotations}
+                                    expandedIds={expandedIds} onToggle={onToggle} onSelectNode={onSelectNode} onSelectAnnotation={onSelectAnnotation}
+                                    activeNodeIds={activeNodeIds} activeAnnotationId={activeAnnotationId} />
+                            ))}
+                            {nodeAnnotations.map(anno => {
+                                const isAnnoActive = activeAnnotationId === anno.id;
+                                return (
+                                    <div key={anno.id}
+                                        onClick={(e) => { e.stopPropagation(); onSelectAnnotation(node.id, anno.id); }}
+                                        style={{ paddingLeft: `${pl + 14}px` }}
+                                        className={`flex items-center gap-1 py-1 pr-2 rounded-md cursor-pointer transition-colors text-xs ${isAnnoActive ? 'bg-amber-100 text-amber-800 font-bold' : 'hover:bg-amber-50 text-gray-600'}`}
+                                    >
+                                        <span className="w-3 shrink-0"></span>
+                                        <i className={`ph-fill ph-highlighter text-[10px] shrink-0 ${isAnnoActive ? 'text-amber-500' : 'text-amber-300'}`}></i>
+                                        <span className="truncate leading-snug">{anno.title}</span>
+                                    </div>
+                                );
+                            })}
+                        </>
+                    )}
+                </div>
+            );
+        };
+
         // --- ViewPane ---
-        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onOpenChild }) => {
+        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onOpenChild, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId }) => {
             const [listCollapsed, setListCollapsed] = useState(false);
             const groupedChildren = {};
             const ungroupedChildren = [];
@@ -493,32 +542,54 @@
                         </button>
                         {!listCollapsed && (
                             <div className={`overflow-y-auto ${isRoot ? 'flex-1' : 'max-h-[22vh]'}`} onScroll={onHideSelectionMenu}>
-                                <div className="p-3 space-y-1.5">
-                                    {node.children.length === 0 && !(nodeAnnotations && nodeAnnotations.length > 0) ? (
-                                        <div className="text-center py-4 opacity-60 bg-white rounded-lg border border-dashed border-gray-300 flex flex-col items-center justify-center min-h-[56px]">
-                                            <i className={`ph-fill ${isRoot ? 'ph-list-plus' : 'ph-tree-structure'} text-xl text-gray-300 mb-1`}></i>
-                                            <p className="text-xs text-gray-400">{isRoot ? 'まだ質問がありません' : 'まだ派生する質問はありません'}</p>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            {Object.entries(groupedChildren).map(([groupName, children]) => (
-                                                <div key={groupName} className="mb-2 bg-slate-100 px-3 py-2 rounded-lg border border-slate-200">
-                                                    <div className="text-xs font-bold text-slate-500 mb-1.5 flex items-center gap-1">
-                                                        <i className="ph-fill ph-folder-notch text-xs"></i> {groupName}
+                                {isRoot ? (
+                                    /* ルートはツリーナビゲーター */
+                                    <div className="py-1">
+                                        {node.children.length === 0 ? (
+                                            <div className="text-center py-4 opacity-60 flex flex-col items-center justify-center">
+                                                <i className="ph-fill ph-list-plus text-xl text-gray-300 mb-1"></i>
+                                                <p className="text-xs text-gray-400">まだ質問がありません</p>
+                                            </div>
+                                        ) : node.children.map(childNode => (
+                                            <TreeNodeItem key={childNode.id} node={childNode} level={0}
+                                                nodes={allNodes || {}} annotations={allAnnotations || []}
+                                                expandedIds={treeExpandedIds || new Set()}
+                                                onToggle={onTreeToggle || (() => {})}
+                                                onSelectNode={onTreeSelectNode || (() => {})}
+                                                onSelectAnnotation={onTreeSelectAnnotation || (() => {})}
+                                                activeNodeIds={treeActiveNodeIds || new Set()}
+                                                activeAnnotationId={treeActiveAnnotationId} />
+                                        ))}
+                                    </div>
+                                ) : (
+                                    /* 非ルートは従来のフラットリスト */
+                                    <div className="p-3 space-y-1.5">
+                                        {node.children.length === 0 && !(nodeAnnotations && nodeAnnotations.length > 0) ? (
+                                            <div className="text-center py-4 opacity-60 bg-white rounded-lg border border-dashed border-gray-300 flex flex-col items-center justify-center min-h-[56px]">
+                                                <i className="ph-fill ph-tree-structure text-xl text-gray-300 mb-1"></i>
+                                                <p className="text-xs text-gray-400">まだ派生する質問はありません</p>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                {Object.entries(groupedChildren).map(([groupName, children]) => (
+                                                    <div key={groupName} className="mb-2 bg-slate-100 px-3 py-2 rounded-lg border border-slate-200">
+                                                        <div className="text-xs font-bold text-slate-500 mb-1.5 flex items-center gap-1">
+                                                            <i className="ph-fill ph-folder-notch text-xs"></i> {groupName}
+                                                        </div>
+                                                        <div className="space-y-1.5">{children.map(childNode => renderChildNode(childNode))}</div>
                                                     </div>
-                                                    <div className="space-y-1.5">{children.map(childNode => renderChildNode(childNode))}</div>
-                                                </div>
-                                            ))}
-                                            {ungroupedChildren.length > 0 && <div className="space-y-1.5">{ungroupedChildren.map(childNode => renderChildNode(childNode))}</div>}
-                                            {!isRoot && nodeAnnotations && nodeAnnotations.length > 0 && (
-                                                <div className="space-y-1.5">
-                                                    {(node.children.length > 0) && <div className="border-t border-gray-200 mt-2 pt-2"></div>}
-                                                    {nodeAnnotations.map(a => renderAnnotationCard(a))}
-                                                </div>
-                                            )}
-                                        </>
-                                    )}
-                                </div>
+                                                ))}
+                                                {ungroupedChildren.length > 0 && <div className="space-y-1.5">{ungroupedChildren.map(childNode => renderChildNode(childNode))}</div>}
+                                                {nodeAnnotations && nodeAnnotations.length > 0 && (
+                                                    <div className="space-y-1.5">
+                                                        {node.children.length > 0 && <div className="border-t border-gray-200 mt-2 pt-2"></div>}
+                                                        {nodeAnnotations.map(a => renderAnnotationCard(a))}
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -793,6 +864,7 @@
             const [nodes, setNodes] = useState({});
             const [annotations, setAnnotations] = useState([]); // テキスト選択注釈
             const [panes, setPanes] = useState([]);
+            const [treeExpandedIds, setTreeExpandedIds] = useState(new Set());
             const [selectionMenu, setSelectionMenu] = useState({ show: false, top: 0, left: 0, text: '', nodeId: null, paneIndex: 0 });
             const [tooltip, setTooltip] = useState({ show: false, text: '', top: 0, left: 0 });
             const scrollContainerRef = useRef(null);
@@ -838,7 +910,7 @@
                 Storage.deleteProjectData(id);
                 setProjectList(prev => { const u = prev.filter(p => p.id !== id); Storage.saveProjectList(u); return u; });
             };
-            const goHome = () => { setAppMode('home'); setCurrentProjectId(null); setCurrentProjectName(''); setNodes({}); setAnnotations([]); setPanes([]); setSelectionMenu({ show: false }); setTooltip({ show: false }); };
+            const goHome = () => { setAppMode('home'); setCurrentProjectId(null); setCurrentProjectName(''); setNodes({}); setAnnotations([]); setPanes([]); setTreeExpandedIds(new Set()); setSelectionMenu({ show: false }); setTooltip({ show: false }); };
 
             // --- ノード操作 ---
             const handleSetupSave = (name) => {
@@ -969,6 +1041,17 @@
                 });
             };
 
+            // --- ツリーナビゲーション ---
+            const handleTreeToggle = (nodeId) => {
+                setTreeExpandedIds(prev => { const next = new Set(prev); next.has(nodeId) ? next.delete(nodeId) : next.add(nodeId); return next; });
+            };
+            const handleTreeSelectNode = (nodeId) => {
+                setPanes(prev => [prev[0], { type: 'view', nodeId }]);
+            };
+            const handleTreeSelectAnnotation = (parentNodeId, annotationId) => {
+                setPanes(prev => [prev[0], { type: 'view', nodeId: parentNodeId }, { type: 'annotation', annotationId }]);
+            };
+
             // --- パンくず生成 ---
             const buildBreadcrumbPath = (paneIndex) => {
                 const path = [];
@@ -1092,11 +1175,14 @@
                                         const nodeAnnotations = annotations.filter(a => a.nodeId === pane.nodeId);
                                         const activeAnnotationId = nextPane && nextPane.type === 'annotation' ? nextPane.annotationId :
                                             nextPane && nextPane.type === 'annotation-edit' ? nextPane.annotationId : null;
+                                        const isRootPane = pane.nodeId === 'root';
+                                        const treeActiveNodeIds = isRootPane ? new Set(panes.slice(1).filter(p => p.nodeId).map(p => p.nodeId)) : null;
+                                        const treeActiveAnnotationId = isRootPane ? (panes.find(p => p.type === 'annotation')?.annotationId || null) : null;
                                         return (
                                             <ViewPane
                                                 key={`pane-${index}-${pane.nodeId}`}
                                                 node={nodeWithValidChildren}
-                                                isRoot={pane.nodeId === 'root'}
+                                                isRoot={isRootPane}
                                                 breadcrumb={breadcrumb}
                                                 isActive={index === panes.length - 1}
                                                 selectedChildId={selectedChildId}
@@ -1114,6 +1200,14 @@
                                                 onClose={() => setPanes(prev => prev.slice(0, index))}
                                                 onAddChild={() => { setPanes(prev => { const next = prev.slice(0, index + 1); next.push({ type: 'add', parentId: pane.nodeId, parentAnnotationId: null }); return next; }); }}
                                                 onOpenChild={(childId) => { setPanes(prev => { const next = prev.slice(0, index + 1); next.push({ type: 'view', nodeId: childId }); return next; }); }}
+                                                allNodes={isRootPane ? nodes : null}
+                                                allAnnotations={isRootPane ? annotations : null}
+                                                treeExpandedIds={isRootPane ? treeExpandedIds : null}
+                                                onTreeToggle={isRootPane ? handleTreeToggle : null}
+                                                onTreeSelectNode={isRootPane ? handleTreeSelectNode : null}
+                                                onTreeSelectAnnotation={isRootPane ? handleTreeSelectAnnotation : null}
+                                                treeActiveNodeIds={treeActiveNodeIds}
+                                                treeActiveAnnotationId={treeActiveAnnotationId}
                                             />
                                         );
                                     }
