@@ -96,13 +96,6 @@
         .anno-list-item { padding: 6px 12px; cursor: pointer; border-left: 3px solid transparent; transition: all 0.15s ease; }
         .anno-list-item:hover { background: rgba(59,130,246,0.08); }
         .anno-list-item.active { background: rgba(59,130,246,0.12); border-left-color: #3b82f6; }
-
-        /* ノード間リンク [[...]] */
-        .node-link { color: #2563eb; text-decoration: underline; cursor: pointer; border-radius: 2px; padding: 0 2px; transition: background 0.15s; }
-        .node-link:hover { background: rgba(37,99,235,0.1); }
-
-        /* 検索ハイライト */
-        .search-highlight { background: rgba(250, 204, 21, 0.5); border-radius: 2px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -189,7 +182,7 @@
         };
 
         // --- MarkdownViewer (注釈ハイライト対応) ---
-        const MarkdownViewer = ({ content, className = "markdown-body", annotations = [], onMarkClick, onMarkHover, activeAnnotationId, allNodes, onNodeLinkClick }) => {
+        const MarkdownViewer = ({ content, className = "markdown-body", annotations = [], onMarkClick, onMarkHover, activeAnnotationId }) => {
             const contentRef = useRef(null);
             const callbacksRef = useRef({ onMarkClick, onMarkHover });
             useEffect(() => { callbacksRef.current = { onMarkClick, onMarkHover }; }, [onMarkClick, onMarkHover]);
@@ -335,61 +328,6 @@
                     }
                 }
             }, [activeAnnotationId]);
-
-            // [[...]] ノード間リンク処理
-            useEffect(() => {
-                const root = contentRef.current;
-                if (!root || !allNodes || !onNodeLinkClick) return;
-                // 既存のnode-linkを解除
-                root.querySelectorAll('.node-link').forEach(el => {
-                    const p = el.parentNode;
-                    while (el.firstChild) p.insertBefore(el.firstChild, el);
-                    p.removeChild(el);
-                });
-                root.normalize();
-
-                const nodeEntries = Object.values(allNodes).filter(n => n.id !== 'root');
-                if (nodeEntries.length === 0) return;
-
-                const pattern = /\[\[(.+?)\]\]/g;
-
-                const processTextNode = (textNode) => {
-                    const text = textNode.textContent;
-                    if (!text.includes('[[')) return;
-                    const frag = document.createDocumentFragment();
-                    let lastIndex = 0;
-                    let match;
-                    pattern.lastIndex = 0;
-                    while ((match = pattern.exec(text)) !== null) {
-                        const linkText = match[1];
-                        // exact match first, then case-insensitive substring
-                        let targetNode = nodeEntries.find(n => n.question === linkText);
-                        if (!targetNode) targetNode = nodeEntries.find(n => n.question.toLowerCase().includes(linkText.toLowerCase()));
-                        if (lastIndex < match.index) frag.appendChild(document.createTextNode(text.substring(lastIndex, match.index)));
-                        if (targetNode) {
-                            const span = document.createElement('span');
-                            span.className = 'node-link';
-                            span.textContent = match[0];
-                            span.dataset.nodeId = targetNode.id;
-                            span.onclick = (e) => { e.preventDefault(); e.stopPropagation(); onNodeLinkClick(targetNode.id); };
-                            frag.appendChild(span);
-                        } else {
-                            frag.appendChild(document.createTextNode(match[0]));
-                        }
-                        lastIndex = match.index + match[0].length;
-                    }
-                    if (lastIndex < text.length) frag.appendChild(document.createTextNode(text.substring(lastIndex)));
-                    if (lastIndex > 0) textNode.parentNode.replaceChild(frag, textNode);
-                };
-
-                const walkForLinks = (node) => {
-                    if (node.nodeType === 3) { processTextNode(node); return; }
-                    if (node.nodeType !== 1) return;
-                    if (node.classList && (node.classList.contains('annotation-mark') || node.classList.contains('node-link'))) return;
-                    Array.from(node.childNodes).forEach(walkForLinks);
-                };
-                walkForLinks(root);
-            }, [content, allNodes, onNodeLinkClick]);
 
             return <div ref={contentRef} className={className}></div>;
         };
@@ -577,7 +515,7 @@
         };
 
         // --- ViewPane ---
-        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId, onNodeLinkClick }) => {
+        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId }) => {
             const [listCollapsed, setListCollapsed] = useState(false);
 
             // セクションごとにアノテーションを振り分け
@@ -777,7 +715,7 @@
                                             )}
                                             <div className="px-6 py-4" onMouseUp={handleSectionMouseUp(section.id)}>
                                                 <div className="selection:bg-blue-200">
-                                                    <MarkdownViewer content={section.content} annotations={sectionAnnotations[section.id] || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} allNodes={allNodes} onNodeLinkClick={onNodeLinkClick} />
+                                                    <MarkdownViewer content={section.content} annotations={sectionAnnotations[section.id] || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} />
                                                 </div>
                                             </div>
                                         </div>
@@ -888,7 +826,7 @@
         };
 
         // --- テキスト注釈ビューペイン ---
-        const AnnotationViewPane = ({ annotation, breadcrumb, childNodes, subAnnotations, activeAnnotationId, selectedChildId, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, allNodes, onNodeLinkClick }) => {
+        const AnnotationViewPane = ({ annotation, breadcrumb, childNodes, subAnnotations, activeAnnotationId, selectedChildId, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu }) => {
             if (!annotation) return null;
 
             const [quoteCollapsed, setQuoteCollapsed] = useState(true);
@@ -1042,7 +980,7 @@
                                             )}
                                             <div className="px-6 py-4" onMouseUp={handleMouseUp}>
                                                 <div className="selection:bg-blue-200">
-                                                    <MarkdownViewer content={section.content} annotations={subAnnotations || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} allNodes={allNodes} onNodeLinkClick={onNodeLinkClick} />
+                                                    <MarkdownViewer content={section.content} annotations={subAnnotations || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} />
                                                 </div>
                                             </div>
                                         </div>
@@ -1364,9 +1302,6 @@
                 const path = buildAncestryPath(parentNodeId);
                 setPanes([{ type: 'view', nodeId: 'root' }, ...path.map(id => ({ type: 'view', nodeId: id })), { type: 'annotation', annotationId }]);
             };
-
-            // ノード間リンク [[...]] クリック
-            const handleNodeLinkClick = (nodeId) => { handleTreeSelectNode(nodeId); };
 
             // --- パンくず生成 ---
             const buildBreadcrumbPath = (paneIndex) => {
