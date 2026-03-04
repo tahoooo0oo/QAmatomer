@@ -466,7 +466,7 @@
         };
 
         // --- ViewPane ---
-        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onOpenChild, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId }) => {
+        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId }) => {
             const [listCollapsed, setListCollapsed] = useState(false);
 
             // セクションごとにアノテーションを振り分け
@@ -569,7 +569,7 @@
                             )}
                         </div>
                         {!listCollapsed && (
-                            <div className={`overflow-y-auto ${isRoot ? 'flex-1' : 'max-h-[22vh]'}`} onScroll={onHideSelectionMenu}>
+                            <div className={`overflow-y-auto ${isRoot ? 'flex-1' : 'max-h-[14vh]'}`} onScroll={onHideSelectionMenu}>
                                 {isRoot ? (
                                     /* ルートはツリーナビゲーター */
                                     <div className="py-1">
@@ -628,22 +628,27 @@
                                         </div>
                                     )}
                                     {node.sections.map((section, i) => (
-                                        <div key={section.id} id={`section-${section.id}`} className={`p-6 md:p-8 ${i < node.sections.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                                        <div key={section.id} id={`section-${section.id}`} className={`p-6 md:p-8 ${i < node.sections.length - 1 ? 'border-b border-gray-200' : ''}`}>
+                                            {section.title && (
+                                                <h3 className="text-xl font-bold text-gray-800 mb-3 pb-2 border-b-2 border-blue-100">{section.title}</h3>
+                                            )}
                                             <div className="flex items-center justify-between mb-3">
-                                                <div className="flex items-center gap-2">
-                                                    {i === 0 && <div className="text-xs text-green-600 font-bold flex items-center gap-1 uppercase tracking-wider"><i className="ph-fill ph-check-circle text-sm"></i> 回答・解説</div>}
-                                                    {section.title && <span className={`font-bold text-gray-700 ${i === 0 ? 'text-sm' : 'text-base'}`}>{section.title}</span>}
-                                                </div>
                                                 <div className="flex items-center gap-1">
-                                                    {i === 0 && <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded">テキストを選択→注釈を追加</span>}
-                                                    <button onClick={() => onAddChild(section.id)} title="このセクションから子ノードを追加" className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"><i className="ph-bold ph-plus text-xs"></i></button>
+                                                    {i === 0 && <div className="text-xs text-green-600 font-bold flex items-center gap-1 uppercase tracking-wider"><i className="ph-fill ph-check-circle text-sm"></i> 回答・解説</div>}
+                                                    {i === 0 && <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded ml-2">テキストを選択→注釈を追加</span>}
                                                 </div>
+                                                <button onClick={() => onAddChild(section.id)} title="このセクションから子ノードを追加" className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"><i className="ph-bold ph-plus text-xs"></i></button>
                                             </div>
                                             <div onMouseUp={handleSectionMouseUp(section.id)} className="selection:bg-blue-200">
                                                 <MarkdownViewer content={section.content} annotations={sectionAnnotations[section.id] || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} />
                                             </div>
                                         </div>
                                     ))}
+                                    <div className="px-6 pb-6">
+                                        <button onClick={onAddSection} className="flex items-center justify-center gap-2 w-full py-2 border border-dashed border-gray-300 rounded-lg text-xs font-bold text-gray-400 hover:text-blue-500 hover:border-blue-300 hover:bg-blue-50 transition-colors">
+                                            <i className="ph-bold ph-plus text-xs"></i> 段落を追加
+                                        </button>
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="p-8 text-center">
@@ -834,7 +839,7 @@
                             <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">注釈・派生する質問 ({totalCount})</span>
                         </button>
                         {!listCollapsed && (
-                            <div className="overflow-y-auto max-h-[14vh]" onScroll={onHideSelectionMenu}>
+                            <div className="overflow-y-auto max-h-[8vh]" onScroll={onHideSelectionMenu}>
                                 <div className="px-3 pb-2 space-y-1">
                                     {totalCount === 0 ? (
                                         <div className="text-center py-2 opacity-60 bg-white rounded border border-dashed border-gray-300 flex items-center justify-center gap-1.5 min-h-[36px]">
@@ -1106,6 +1111,13 @@
             const handleTreeExpand = (nodeId) => {
                 setTreeExpandedIds(prev => { const next = new Set(prev); next.add(nodeId); return next; });
             };
+            const handleAddSection = (paneIndex, nodeId) => {
+                setNodes(prev => ({
+                    ...prev,
+                    [nodeId]: { ...prev[nodeId], sections: [...(prev[nodeId].sections || []), { id: generateId(), title: '', content: '' }] }
+                }));
+                setPanes(prev => { const n = [...prev]; n[paneIndex] = { type: 'edit', nodeId }; return n; });
+            };
             const handleTreeExpandAll = () => {
                 setTreeExpandedIds(new Set(Object.keys(nodes).filter(k => k !== 'root')));
             };
@@ -1280,6 +1292,7 @@
                                                 onDelete={() => handleDeleteNode(index, pane.nodeId, node.parentId, node.parentAnnotationId)}
                                                 onClose={() => setPanes(prev => prev.slice(0, index))}
                                                 onAddChild={(_sectionId) => { setPanes(prev => { const next = prev.slice(0, index + 1); next.push({ type: 'add', parentId: pane.nodeId, parentAnnotationId: null }); return next; }); }}
+                                                onAddSection={() => handleAddSection(index, pane.nodeId)}
                                                 onOpenChild={(childId) => { setPanes(prev => { const next = prev.slice(0, index + 1); next.push({ type: 'view', nodeId: childId }); return next; }); }}
                                                 allNodes={isRootPane ? nodes : null}
                                                 allAnnotations={isRootPane ? annotations : null}
