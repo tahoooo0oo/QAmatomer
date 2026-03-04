@@ -411,7 +411,7 @@
 
 
         // --- ツリーナビゲーション ノードアイテム (再帰) ---
-        const TreeNodeItem = ({ node, level, nodes, annotations, expandedIds, onToggle, onSelectNode, onSelectAnnotation, activeNodeIds, activeAnnotationId }) => {
+        const TreeNodeItem = ({ node, level, nodes, annotations, expandedIds, onToggle, onExpand, onSelectNode, onSelectAnnotation, activeNodeIds, activeAnnotationId }) => {
             const isExpanded = expandedIds.has(node.id);
             const isActive = activeNodeIds.has(node.id);
             const children = node.children.map(id => nodes[id]).filter(Boolean);
@@ -422,11 +422,11 @@
             return (
                 <div>
                     <div
-                        onClick={() => { onToggle(node.id); onSelectNode(node.id); }}
+                        onClick={() => { onExpand(node.id); onSelectNode(node.id); }}
                         style={{ paddingLeft: `${pl}px` }}
                         className={`flex items-center gap-1 py-1.5 pr-2 rounded-md cursor-pointer transition-colors text-xs ${isActive ? 'bg-blue-100 text-blue-800 font-bold' : 'hover:bg-gray-100 text-gray-700'}`}
                     >
-                        <span className="w-3 shrink-0 flex items-center justify-center">
+                        <span onClick={(e) => { e.stopPropagation(); onToggle(node.id); }} className="w-3 shrink-0 flex items-center justify-center">
                             {hasItems && <i className={`ph-bold ph-caret-${isExpanded ? 'down' : 'right'} text-[9px] ${isActive ? 'text-blue-500' : 'text-gray-400'}`}></i>}
                         </span>
                         <i className={`ph-fill ph-question text-[10px] shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-300'}`}></i>
@@ -436,7 +436,7 @@
                         <>
                             {children.map(child => (
                                 <TreeNodeItem key={child.id} node={child} level={level + 1} nodes={nodes} annotations={annotations}
-                                    expandedIds={expandedIds} onToggle={onToggle} onSelectNode={onSelectNode} onSelectAnnotation={onSelectAnnotation}
+                                    expandedIds={expandedIds} onToggle={onToggle} onExpand={onExpand} onSelectNode={onSelectNode} onSelectAnnotation={onSelectAnnotation}
                                     activeNodeIds={activeNodeIds} activeAnnotationId={activeAnnotationId} />
                             ))}
                             {nodeAnnotations.map(anno => {
@@ -460,7 +460,7 @@
         };
 
         // --- ViewPane ---
-        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onOpenChild, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId }) => {
+        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onOpenChild, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId }) => {
             const [listCollapsed, setListCollapsed] = useState(false);
             const groupedChildren = {};
             const ungroupedChildren = [];
@@ -555,6 +555,7 @@
                                                 nodes={allNodes || {}} annotations={allAnnotations || []}
                                                 expandedIds={treeExpandedIds || new Set()}
                                                 onToggle={onTreeToggle || (() => {})}
+                                                onExpand={onTreeExpand || (() => {})}
                                                 onSelectNode={onTreeSelectNode || (() => {})}
                                                 onSelectAnnotation={onTreeSelectAnnotation || (() => {})}
                                                 activeNodeIds={treeActiveNodeIds || new Set()}
@@ -1045,6 +1046,9 @@
             const handleTreeToggle = (nodeId) => {
                 setTreeExpandedIds(prev => { const next = new Set(prev); next.has(nodeId) ? next.delete(nodeId) : next.add(nodeId); return next; });
             };
+            const handleTreeExpand = (nodeId) => {
+                setTreeExpandedIds(prev => { const next = new Set(prev); next.add(nodeId); return next; });
+            };
             const buildAncestryPath = (nodeId) => {
                 const path = [];
                 let current = nodes[nodeId];
@@ -1056,6 +1060,8 @@
             };
             const handleTreeSelectNode = (nodeId) => {
                 const path = buildAncestryPath(nodeId);
+                // 祖先ノードを全て展開
+                setTreeExpandedIds(prev => { const next = new Set(prev); path.forEach(id => next.add(id)); return next; });
                 setPanes([{ type: 'view', nodeId: 'root' }, ...path.map(id => ({ type: 'view', nodeId: id }))]);
             };
             const handleTreeSelectAnnotation = (parentNodeId, annotationId) => {
@@ -1215,6 +1221,7 @@
                                                 allAnnotations={isRootPane ? annotations : null}
                                                 treeExpandedIds={isRootPane ? treeExpandedIds : null}
                                                 onTreeToggle={isRootPane ? handleTreeToggle : null}
+                                                onTreeExpand={isRootPane ? handleTreeExpand : null}
                                                 onTreeSelectNode={isRootPane ? handleTreeSelectNode : null}
                                                 onTreeSelectAnnotation={isRootPane ? handleTreeSelectAnnotation : null}
                                                 treeActiveNodeIds={treeActiveNodeIds}
