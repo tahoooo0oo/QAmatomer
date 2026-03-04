@@ -577,8 +577,10 @@
         };
 
         // --- ViewPane ---
-        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId, onNodeLinkClick }) => {
+        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId, onNodeLinkClick, onOpenSearch }) => {
             const [listCollapsed, setListCollapsed] = useState(false);
+            const [collapsedSections, setCollapsedSections] = useState(new Set());
+            const toggleSection = (sectionId) => setCollapsedSections(prev => { const next = new Set(prev); next.has(sectionId) ? next.delete(sectionId) : next.add(sectionId); return next; });
 
             // セクションごとにアノテーションを振り分け
             const sectionAnnotations = {};
@@ -648,6 +650,9 @@
                             <h2 className={`font-bold text-gray-800 leading-snug ${isRoot ? 'text-xl' : 'text-lg'}`}>{node.question}</h2>
                         </div>
                         <div className="flex items-center gap-1 shrink-0 ml-2">
+                            {isRoot && onOpenSearch && (
+                                <button onClick={onOpenSearch} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="全文検索 (Ctrl+K)"><i className="ph ph-magnifying-glass text-lg"></i></button>
+                            )}
                             <button onClick={onAddChild} className="px-2.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 hover:border-blue-300 transition-colors flex items-center gap-1" title="質問を追加">
                                 <i className="ph-bold ph-plus text-xs"></i><span className="hidden sm:inline">追加</span>
                             </button>
@@ -746,12 +751,17 @@
                                         </div>
                                     )}
                                     {/* セクションカード */}
-                                    {node.sections.map((section, i) => (
+                                    {node.sections.map((section, i) => {
+                                        const isSectionCollapsed = collapsedSections.has(section.id);
+                                        return (
                                         <div key={section.id} id={`section-${section.id}`} className="mx-4 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                                             {section.title ? (
                                                 <div className="bg-blue-50 px-6 py-3 border-b-2 border-blue-100 flex items-center justify-between">
                                                     <h3 className="text-xl font-bold text-blue-900 leading-snug flex-1">{section.title}</h3>
-                                                    <button onClick={() => onAddChild(section.id)} title="このセクションから子ノードを追加" className="w-6 h-6 flex items-center justify-center rounded text-blue-300 hover:text-blue-600 hover:bg-blue-100 transition-colors shrink-0 ml-2"><i className="ph-bold ph-plus text-xs"></i></button>
+                                                    <div className="flex items-center gap-1 shrink-0 ml-2">
+                                                        <button onClick={() => onAddChild(section.id)} title="このセクションから子ノードを追加" className="w-6 h-6 flex items-center justify-center rounded text-blue-300 hover:text-blue-600 hover:bg-blue-100 transition-colors"><i className="ph-bold ph-plus text-xs"></i></button>
+                                                        <button onClick={() => toggleSection(section.id)} title={isSectionCollapsed ? '展開' : '折りたたむ'} className="w-6 h-6 flex items-center justify-center rounded text-blue-300 hover:text-blue-600 hover:bg-blue-100 transition-colors"><i className={`ph-bold ph-caret-${isSectionCollapsed ? 'down' : 'up'} text-xs`}></i></button>
+                                                    </div>
                                                 </div>
                                             ) : (
                                                 <div className="px-6 pt-4 pb-0 flex items-center justify-between">
@@ -764,10 +774,13 @@
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <button onClick={() => onAddChild(section.id)} title="このセクションから子ノードを追加" className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors shrink-0"><i className="ph-bold ph-plus text-xs"></i></button>
+                                                    <div className="flex items-center gap-1 shrink-0">
+                                                        <button onClick={() => onAddChild(section.id)} title="このセクションから子ノードを追加" className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"><i className="ph-bold ph-plus text-xs"></i></button>
+                                                        <button onClick={() => toggleSection(section.id)} title={isSectionCollapsed ? '展開' : '折りたたむ'} className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"><i className={`ph-bold ph-caret-${isSectionCollapsed ? 'down' : 'up'} text-xs`}></i></button>
+                                                    </div>
                                                 </div>
                                             )}
-                                            {i < node.sections.length - 1 && (
+                                            {!isSectionCollapsed && i < node.sections.length - 1 && (
                                                 <div className="border-b border-gray-100 px-6 py-2 flex justify-end">
                                                     <button onClick={() => scrollToId(`section-${node.sections[i+1].id}`)}
                                                         className="text-xs text-gray-400 hover:text-blue-500 flex items-center gap-1 transition-colors">
@@ -775,13 +788,16 @@
                                                     </button>
                                                 </div>
                                             )}
-                                            <div className="px-6 py-4" onMouseUp={handleSectionMouseUp(section.id)}>
-                                                <div className="selection:bg-blue-200">
-                                                    <MarkdownViewer content={section.content} annotations={sectionAnnotations[section.id] || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} allNodes={allNodes} onNodeLinkClick={onNodeLinkClick} />
+                                            {!isSectionCollapsed && (
+                                                <div className="px-6 py-4" onMouseUp={handleSectionMouseUp(section.id)}>
+                                                    <div className="selection:bg-blue-200">
+                                                        <MarkdownViewer content={section.content} annotations={sectionAnnotations[section.id] || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} allNodes={allNodes} onNodeLinkClick={onNodeLinkClick} />
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            )}
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                     <div className="mx-4 pb-2">
                                         <button onClick={onAddSection} className="flex items-center justify-center gap-2 w-full py-2 border border-dashed border-gray-300 rounded-lg text-xs font-bold text-gray-400 hover:text-blue-500 hover:border-blue-300 hover:bg-white transition-colors">
                                             <i className="ph-bold ph-plus text-xs"></i> 段落を追加
@@ -893,6 +909,8 @@
 
             const [quoteCollapsed, setQuoteCollapsed] = useState(true);
             const [listCollapsed, setListCollapsed] = useState(false);
+            const [collapsedSections, setCollapsedSections] = useState(new Set());
+            const toggleSection = (sectionId) => setCollapsedSections(prev => { const next = new Set(prev); next.has(sectionId) ? next.delete(sectionId) : next.add(sectionId); return next; });
 
             const handleMouseUp = () => {
                 setTimeout(() => {
@@ -1015,24 +1033,30 @@
                                             ))}
                                         </div>
                                     )}
-                                    {sections.map((section, i) => (
+                                    {sections.map((section, i) => {
+                                        const isSectionCollapsed = collapsedSections.has(section.id);
+                                        return (
                                         <div key={section.id} id={`anno-section-${section.id}`} className="mx-4 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                                             {section.title ? (
                                                 <div className="bg-amber-50 px-6 py-3 border-b-2 border-amber-100 flex items-center justify-between">
                                                     <h3 className="text-lg font-bold text-amber-900 leading-snug flex-1">{section.title}</h3>
+                                                    <button onClick={() => toggleSection(section.id)} title={isSectionCollapsed ? '展開' : '折りたたむ'} className="w-6 h-6 flex items-center justify-center rounded text-amber-300 hover:text-amber-600 hover:bg-amber-100 transition-colors shrink-0 ml-2"><i className={`ph-bold ph-caret-${isSectionCollapsed ? 'down' : 'up'} text-xs`}></i></button>
                                                 </div>
                                             ) : (
-                                                <div className="px-6 pt-4 pb-0">
-                                                    {sections.length > 1 && <div className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-1">段落 {i+1}</div>}
-                                                    {i === 0 && (
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="text-xs text-green-600 font-bold flex items-center gap-1 uppercase tracking-wider"><i className="ph-fill ph-check-circle text-sm"></i> 解説</div>
-                                                            <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded">テキストを選択→注釈を追加</span>
-                                                        </div>
-                                                    )}
+                                                <div className="px-6 pt-4 pb-0 flex items-center justify-between">
+                                                    <div>
+                                                        {sections.length > 1 && <div className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-1">段落 {i+1}</div>}
+                                                        {i === 0 && (
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="text-xs text-green-600 font-bold flex items-center gap-1 uppercase tracking-wider"><i className="ph-fill ph-check-circle text-sm"></i> 解説</div>
+                                                                <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded">テキストを選択→注釈を追加</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <button onClick={() => toggleSection(section.id)} title={isSectionCollapsed ? '展開' : '折りたたむ'} className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-amber-500 hover:bg-amber-50 transition-colors shrink-0"><i className={`ph-bold ph-caret-${isSectionCollapsed ? 'down' : 'up'} text-xs`}></i></button>
                                                 </div>
                                             )}
-                                            {i < sections.length - 1 && (
+                                            {!isSectionCollapsed && i < sections.length - 1 && (
                                                 <div className="border-b border-gray-100 px-6 py-2 flex justify-end">
                                                     <button onClick={() => scrollToId(`anno-section-${sections[i+1].id}`)}
                                                         className="text-xs text-gray-400 hover:text-amber-500 flex items-center gap-1 transition-colors">
@@ -1040,13 +1064,16 @@
                                                     </button>
                                                 </div>
                                             )}
-                                            <div className="px-6 py-4" onMouseUp={handleMouseUp}>
-                                                <div className="selection:bg-blue-200">
-                                                    <MarkdownViewer content={section.content} annotations={subAnnotations || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} allNodes={allNodes} onNodeLinkClick={onNodeLinkClick} />
+                                            {!isSectionCollapsed && (
+                                                <div className="px-6 py-4" onMouseUp={handleMouseUp}>
+                                                    <div className="selection:bg-blue-200">
+                                                        <MarkdownViewer content={section.content} annotations={subAnnotations || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} allNodes={allNodes} onNodeLinkClick={onNodeLinkClick} />
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            )}
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                     <div className="mx-4 pb-2">
                                         <button onClick={onAddSection} className="flex items-center justify-center gap-2 w-full py-2 border border-dashed border-gray-300 rounded-lg text-xs font-bold text-gray-400 hover:text-amber-500 hover:border-amber-300 hover:bg-white transition-colors">
                                             <i className="ph-bold ph-plus text-xs"></i> 段落を追加
@@ -1143,6 +1170,10 @@
             const [treeExpandedIds, setTreeExpandedIds] = useState(new Set());
             const [selectionMenu, setSelectionMenu] = useState({ show: false, top: 0, left: 0, text: '', nodeId: null, paneIndex: 0 });
             const [tooltip, setTooltip] = useState({ show: false, text: '', top: 0, left: 0 });
+            const [searchOpen, setSearchOpen] = useState(false);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [searchResults, setSearchResults] = useState([]);
+            const searchInputRef = useRef(null);
             const scrollContainerRef = useRef(null);
 
             // 初期化
@@ -1188,6 +1219,107 @@
                 setProjectList(prev => { const u = prev.filter(p => p.id !== id); Storage.saveProjectList(u); return u; });
             };
             const goHome = () => { setAppMode('home'); setCurrentProjectId(null); setCurrentProjectName(''); setNodes({}); setAnnotations([]); setPanes([]); setTreeExpandedIds(new Set()); setSelectionMenu({ show: false }); setTooltip({ show: false }); };
+
+            // --- 全文検索 ---
+            const openSearch = () => { setSearchQuery(''); setSearchResults([]); setSearchOpen(true); setTimeout(() => searchInputRef.current?.focus(), 50); };
+            const closeSearch = () => { setSearchOpen(false); setSearchQuery(''); setSearchResults([]); };
+
+            const getSnippet = (text, query, maxLen = 60) => {
+                if (!text || !query) return '';
+                const idx = text.toLowerCase().indexOf(query.toLowerCase());
+                if (idx === -1) return text.substring(0, maxLen) + (text.length > maxLen ? '…' : '');
+                const start = Math.max(0, idx - 20);
+                const end = Math.min(text.length, idx + query.length + 40);
+                return (start > 0 ? '…' : '') + text.substring(start, end) + (end < text.length ? '…' : '');
+            };
+
+            const doSearch = (q) => {
+                setSearchQuery(q);
+                if (!q.trim() || !nodes['root']) { setSearchResults([]); return; }
+                const ql = q.toLowerCase();
+                const results = [];
+                // Search nodes
+                Object.values(nodes).filter(n => n.id !== 'root').forEach(n => {
+                    if (n.question.toLowerCase().includes(ql)) {
+                        results.push({ type: 'node', id: n.id, title: n.question, snippet: getSnippet(n.question, q), matchIn: 'question' });
+                    }
+                    if (n.sections) {
+                        n.sections.forEach(s => {
+                            if (s.title && s.title.toLowerCase().includes(ql)) {
+                                results.push({ type: 'node', id: n.id, title: n.question, snippet: getSnippet(s.title, q), matchIn: 'sectionTitle' });
+                            }
+                            if (s.content && s.content.toLowerCase().includes(ql)) {
+                                results.push({ type: 'node', id: n.id, title: n.question, snippet: getSnippet(s.content, q), matchIn: 'sectionContent' });
+                            }
+                        });
+                    }
+                });
+                // Search annotations
+                annotations.forEach(a => {
+                    if (a.title && a.title.toLowerCase().includes(ql)) {
+                        results.push({ type: 'annotation', id: a.id, nodeId: a.nodeId, title: a.title, snippet: getSnippet(a.title, q), matchIn: 'annotationTitle' });
+                    }
+                    if (a.sections) {
+                        a.sections.forEach(s => {
+                            if (s.title && s.title.toLowerCase().includes(ql)) {
+                                results.push({ type: 'annotation', id: a.id, nodeId: a.nodeId, title: a.title, snippet: getSnippet(s.title, q), matchIn: 'annotationSectionTitle' });
+                            }
+                            if (s.content && s.content.toLowerCase().includes(ql)) {
+                                results.push({ type: 'annotation', id: a.id, nodeId: a.nodeId, title: a.title, snippet: getSnippet(s.content, q), matchIn: 'annotationContent' });
+                            }
+                        });
+                    }
+                });
+                // Deduplicate by id (prefer earlier match)
+                const seen = new Set();
+                const deduped = results.filter(r => { const k = r.type + r.id; if (seen.has(k)) return false; seen.add(k); return true; });
+                setSearchResults(deduped);
+            };
+
+            // Keyboard shortcut Ctrl+K / Cmd+K
+            useEffect(() => {
+                const handler = (e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                        e.preventDefault();
+                        if (appMode === 'workspace') { searchOpen ? closeSearch() : openSearch(); }
+                    }
+                    if (e.key === 'Escape' && searchOpen) closeSearch();
+                };
+                window.addEventListener('keydown', handler);
+                return () => window.removeEventListener('keydown', handler);
+            }, [appMode, searchOpen]);
+
+            const handleSearchNavigate = (result) => {
+                closeSearch();
+                if (result.type === 'node') {
+                    handleTreeSelectNode(result.id);
+                } else if (result.type === 'annotation') {
+                    const anno = annotations.find(a => a.id === result.id);
+                    if (anno) {
+                        if (anno.nodeId) handleTreeSelectAnnotation(anno.nodeId, anno.id);
+                        else if (anno.parentAnnotationId) {
+                            // Navigate to parent annotation chain
+                            const parentAnno = annotations.find(a => a.id === anno.parentAnnotationId);
+                            if (parentAnno && parentAnno.nodeId) {
+                                handleTreeSelectAnnotation(parentAnno.nodeId, anno.id);
+                            }
+                        }
+                    }
+                }
+            };
+
+            const highlightMatch = (text, query) => {
+                if (!query) return text;
+                const idx = text.toLowerCase().indexOf(query.toLowerCase());
+                if (idx === -1) return text;
+                return (
+                    <span>
+                        {text.substring(0, idx)}
+                        <mark className="search-highlight">{text.substring(idx, idx + query.length)}</mark>
+                        {text.substring(idx + query.length)}
+                    </span>
+                );
+            };
 
             // --- ノード操作 ---
             const handleSetupSave = (name) => {
@@ -1478,6 +1610,61 @@
                                 </div>
                             )}
 
+                            {/* 全文検索オーバーレイ */}
+                            {searchOpen && (
+                                <div className="fixed inset-0 z-50 flex items-start justify-center pt-24 bg-black/40" onClick={(e) => { if (e.target === e.currentTarget) closeSearch(); }}>
+                                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl mx-4 overflow-hidden animate-fade-in-up" onClick={e => e.stopPropagation()}>
+                                        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200">
+                                            <i className="ph ph-magnifying-glass text-gray-400 text-xl shrink-0"></i>
+                                            <input
+                                                ref={searchInputRef}
+                                                type="text"
+                                                value={searchQuery}
+                                                onChange={e => doSearch(e.target.value)}
+                                                onKeyDown={e => { if (e.key === 'Escape') closeSearch(); }}
+                                                className="flex-1 text-gray-800 text-sm outline-none bg-transparent placeholder-gray-400"
+                                                placeholder="全文検索… (Esc で閉じる)"
+                                            />
+                                            {searchQuery && (
+                                                <button onClick={() => { setSearchQuery(''); setSearchResults([]); searchInputRef.current?.focus(); }} className="text-gray-400 hover:text-gray-600 transition-colors">
+                                                    <i className="ph-bold ph-x text-sm"></i>
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div className="max-h-[60vh] overflow-y-auto">
+                                            {searchQuery.trim() === '' ? (
+                                                <div className="py-10 text-center text-gray-400 text-sm">検索キーワードを入力してください</div>
+                                            ) : searchResults.length === 0 ? (
+                                                <div className="py-10 text-center text-gray-400 text-sm">結果なし</div>
+                                            ) : (
+                                                <div className="py-2">
+                                                    {searchResults.map((result, idx) => (
+                                                        <button key={idx} onClick={() => handleSearchNavigate(result)}
+                                                            className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors flex items-start gap-3 border-b border-gray-100 last:border-b-0">
+                                                            <span className="shrink-0 mt-0.5">
+                                                                {result.type === 'node'
+                                                                    ? <i className="ph-fill ph-question text-blue-500 text-base"></i>
+                                                                    : <i className="ph-fill ph-highlighter text-amber-500 text-base"></i>
+                                                                }
+                                                            </span>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="font-bold text-gray-800 text-sm truncate">{highlightMatch(result.title, searchQuery)}</div>
+                                                                {result.snippet && result.snippet !== result.title && (
+                                                                    <div className="text-xs text-gray-500 mt-0.5 line-clamp-2">{highlightMatch(result.snippet, searchQuery)}</div>
+                                                                )}
+                                                            </div>
+                                                            <span className="text-[10px] text-gray-400 shrink-0 mt-1">
+                                                                {result.type === 'node' ? '質問' : '注釈'}
+                                                            </span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="horizontal-scroll-container scroll-smooth" ref={scrollContainerRef}>
                                 {panes.map((pane, index) => {
                                     const breadcrumb = buildBreadcrumbPath(index);
@@ -1518,7 +1705,7 @@
                                                 onAddChild={(_sectionId) => { setPanes(prev => { const next = prev.slice(0, index + 1); next.push({ type: 'add', parentId: pane.nodeId, parentAnnotationId: null }); return next; }); }}
                                                 onAddSection={() => handleAddSection(index, pane.nodeId)}
                                                 onOpenChild={(childId) => { setPanes(prev => { const next = prev.slice(0, index + 1); next.push({ type: 'view', nodeId: childId }); return next; }); }}
-                                                allNodes={isRootPane ? nodes : null}
+                                                allNodes={nodes}
                                                 allAnnotations={isRootPane ? annotations : null}
                                                 treeExpandedIds={isRootPane ? treeExpandedIds : null}
                                                 onTreeToggle={isRootPane ? handleTreeToggle : null}
@@ -1529,6 +1716,8 @@
                                                 onTreeSelectAnnotation={isRootPane ? handleTreeSelectAnnotation : null}
                                                 treeActiveNodeIds={treeActiveNodeIds}
                                                 treeActiveAnnotationId={treeActiveAnnotationId}
+                                                onNodeLinkClick={handleNodeLinkClick}
+                                                onOpenSearch={isRootPane ? openSearch : null}
                                             />
                                         );
                                     }
@@ -1582,6 +1771,8 @@
                                                 onAnnotationClick={(annotationId) => openAnnotation(index, annotationId)}
                                                 onMarkHover={(h, t, r) => { if (h && r) setTooltip({ show: true, text: t, top: r.top - 8, left: r.left + r.width / 2 }); else setTooltip({ show: false }); }}
                                                 onHideSelectionMenu={hideSelectionMenu}
+                                                allNodes={nodes}
+                                                onNodeLinkClick={handleNodeLinkClick}
                                             />
                                         );
                                     }
