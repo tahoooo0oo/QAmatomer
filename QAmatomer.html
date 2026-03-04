@@ -111,6 +111,11 @@
             return { ...rest, sections: [{ id: generateId(), title: '', content: answer || '' }] };
         };
         const migrateNodes = (nodesObj) => Object.fromEntries(Object.entries(nodesObj).map(([k, v]) => [k, migrateNode(v)]));
+        const migrateAnnotation = (a) => {
+            if (a.sections) return a;
+            return { ...a, sections: [{ id: generateId(), title: '', content: a.content || '' }] };
+        };
+        const migrateAnnotations = (arr) => arr.map(migrateAnnotation);
 
         // テキスト選択からquoteを取得（KaTeX対応）
         const getQuoteFromSelection = (range) => {
@@ -211,7 +216,7 @@
                 return () => el.removeEventListener('copy', handleCopy);
             }, []);
 
-            // 注釈ハイライト適用
+            // 注釈ハイライト適用（DOM操作）― contentまたはannotations変更時のみ実行
             useEffect(() => {
                 const root = contentRef.current; if (!root) return;
                 root.querySelectorAll('.annotation-mark').forEach(mark => {
@@ -255,7 +260,8 @@
                     if (ol.length === 0) continue;
                     if (seg.type === 'katex' || seg.type === 'katex-display') {
                         const w = document.createElement('span');
-                        w.className = 'annotation-mark' + (ol.some(m=>m.id===activeAnnotationId)?' active':'');
+                        w.className = 'annotation-mark';
+                        w.dataset.annoIds = JSON.stringify(ol.map(m => m.id));
                         if (seg.type === 'katex-display') w.style.display = 'block';
                         setupEv(w, ol); seg.node.parentNode.insertBefore(w, seg.node); w.appendChild(seg.node);
                     } else if (seg.type === 'text') {
@@ -270,15 +276,42 @@
                             const cov = ol.filter(m => m.start<=vs && m.end>=ve);
                             if (cov.length > 0) {
                                 const sp = document.createElement('span');
-                                sp.className = 'annotation-mark' + (cov.some(m=>m.id===activeAnnotationId)?' active':'');
-                                sp.dataset.annoId = cov[0].id; sp.textContent = sub; setupEv(sp, cov); frag.appendChild(sp);
+                                sp.className = 'annotation-mark';
+                                sp.dataset.annoId = cov[0].id;
+                                sp.dataset.annoIds = JSON.stringify(cov.map(m => m.id));
+                                sp.textContent = sub; setupEv(sp, cov); frag.appendChild(sp);
                             } else frag.appendChild(document.createTextNode(sub));
                         }
                         seg.node.parentNode.replaceChild(frag, seg.node);
                     }
                 }
                 return () => { if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false); };
-            }, [content, annotationsStr, activeAnnotationId]);
+            }, [content, annotationsStr]);
+
+            // activeAnnotationId変更時のみクラス更新＋スクロール（DOM操作なし）
+            useEffect(() => {
+                const root = contentRef.current; if (!root) return;
+                let activeEl = null;
+                root.querySelectorAll('.annotation-mark').forEach(el => {
+                    const ids = JSON.parse(el.dataset.annoIds || '[]');
+                    const isActive = activeAnnotationId && ids.includes(activeAnnotationId);
+                    el.className = 'annotation-mark' + (isActive ? ' active' : '');
+                    if (isActive && !activeEl) activeEl = el;
+                });
+                if (activeEl) {
+                    // ページ全体ではなく最近傍のスクロール可能な親要素内でスクロール
+                    let parent = activeEl.parentElement;
+                    while (parent && !['auto', 'scroll'].includes(window.getComputedStyle(parent).overflowY)) {
+                        parent = parent.parentElement;
+                    }
+                    if (parent) {
+                        const elRect = activeEl.getBoundingClientRect();
+                        const parentRect = parent.getBoundingClientRect();
+                        const relTop = elRect.top - parentRect.top + parent.scrollTop;
+                        parent.scrollTo({ top: Math.max(0, relTop - 80), behavior: 'smooth' });
+                    }
+                }
+            }, [activeAnnotationId]);
 
             return <div ref={contentRef} className={className}></div>;
         };
@@ -616,36 +649,63 @@
                     </div>
                     {/* 回答・解説パネル — 残りを占める、独立スクロール */}
                     {!isRoot && (
-                        <div className="flex-1 overflow-y-auto bg-white" onScroll={onHideSelectionMenu}>
+                        <div className="flex-1 overflow-y-auto bg-slate-100" onScroll={onHideSelectionMenu}>
                             {node.sections && node.sections.some(s => s.content) ? (
-                                <div>
-                                    {node.sections.some(s => s.title) && (
-                                        <div className="px-6 pt-4 pb-2 border-b border-gray-100">
-                                            <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-1.5">目次</div>
-                                            {node.sections.filter(s => s.title).map(s => (
-                                                <a key={s.id} href={`#section-${s.id}`} className="block text-xs text-blue-500 hover:underline ml-2 mb-0.5">{s.title}</a>
+                                <div className="py-4 flex flex-col gap-3">
+                                    {/* 目次（タイトル付きセクションが存在する場合） */}
+                                    {node.sections.length > 1 && node.sections.some(s => s.title) && (
+                                        <div className="mx-4 bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-3">
+                                            <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">目次</div>
+                                            {node.sections.map((s, i) => (
+                                                <button key={s.id} onClick={() => document.getElementById(`section-${s.id}`)?.scrollIntoView({behavior:'smooth', block:'start'})}
+                                                    className="flex items-center gap-2 w-full text-left py-0.5 group">
+                                                    <span className="text-[10px] text-gray-300 group-hover:text-blue-300 shrink-0">{i+1}.</span>
+                                                    <span className="text-xs text-blue-500 group-hover:text-blue-700 group-hover:underline">
+                                                        {s.title || <span className="text-gray-400 italic">（タイトルなし）</span>}
+                                                    </span>
+                                                </button>
                                             ))}
                                         </div>
                                     )}
+                                    {/* セクションカード */}
                                     {node.sections.map((section, i) => (
-                                        <div key={section.id} id={`section-${section.id}`} className={`p-6 md:p-8 ${i < node.sections.length - 1 ? 'border-b border-gray-200' : ''}`}>
-                                            {section.title && (
-                                                <h3 className="text-xl font-bold text-gray-800 mb-3 pb-2 border-b-2 border-blue-100">{section.title}</h3>
-                                            )}
-                                            <div className="flex items-center justify-between mb-3">
-                                                <div className="flex items-center gap-1">
-                                                    {i === 0 && <div className="text-xs text-green-600 font-bold flex items-center gap-1 uppercase tracking-wider"><i className="ph-fill ph-check-circle text-sm"></i> 回答・解説</div>}
-                                                    {i === 0 && <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded ml-2">テキストを選択→注釈を追加</span>}
+                                        <div key={section.id} id={`section-${section.id}`} className="mx-4 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                                            {section.title ? (
+                                                <div className="bg-blue-50 px-6 py-3 border-b-2 border-blue-100 flex items-center justify-between">
+                                                    <h3 className="text-xl font-bold text-blue-900 leading-snug flex-1">{section.title}</h3>
+                                                    <button onClick={() => onAddChild(section.id)} title="このセクションから子ノードを追加" className="w-6 h-6 flex items-center justify-center rounded text-blue-300 hover:text-blue-600 hover:bg-blue-100 transition-colors shrink-0 ml-2"><i className="ph-bold ph-plus text-xs"></i></button>
                                                 </div>
-                                                <button onClick={() => onAddChild(section.id)} title="このセクションから子ノードを追加" className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"><i className="ph-bold ph-plus text-xs"></i></button>
+                                            ) : (
+                                                <div className="px-6 pt-4 pb-0 flex items-center justify-between">
+                                                    <div>
+                                                        {node.sections.length > 1 && <div className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">段落 {i+1}</div>}
+                                                        {i === 0 && (
+                                                            <div className="flex items-center gap-2 mt-1">
+                                                                <div className="text-xs text-green-600 font-bold flex items-center gap-1 uppercase tracking-wider"><i className="ph-fill ph-check-circle text-sm"></i> 回答・解説</div>
+                                                                <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded">テキストを選択→注釈を追加</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <button onClick={() => onAddChild(section.id)} title="このセクションから子ノードを追加" className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors shrink-0"><i className="ph-bold ph-plus text-xs"></i></button>
+                                                </div>
+                                            )}
+                                            <div className="px-6 py-4" onMouseUp={handleSectionMouseUp(section.id)}>
+                                                <div className="selection:bg-blue-200">
+                                                    <MarkdownViewer content={section.content} annotations={sectionAnnotations[section.id] || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} />
+                                                </div>
                                             </div>
-                                            <div onMouseUp={handleSectionMouseUp(section.id)} className="selection:bg-blue-200">
-                                                <MarkdownViewer content={section.content} annotations={sectionAnnotations[section.id] || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} />
-                                            </div>
+                                            {i < node.sections.length - 1 && (
+                                                <div className="border-t border-gray-100 px-6 py-2 flex justify-end">
+                                                    <button onClick={() => document.getElementById(`section-${node.sections[i+1].id}`)?.scrollIntoView({behavior:'smooth', block:'start'})}
+                                                        className="text-xs text-gray-400 hover:text-blue-500 flex items-center gap-1 transition-colors">
+                                                        次の段落へ <i className="ph-bold ph-arrow-down text-xs"></i>
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
-                                    <div className="px-6 pb-6">
-                                        <button onClick={onAddSection} className="flex items-center justify-center gap-2 w-full py-2 border border-dashed border-gray-300 rounded-lg text-xs font-bold text-gray-400 hover:text-blue-500 hover:border-blue-300 hover:bg-blue-50 transition-colors">
+                                    <div className="mx-4 pb-2">
+                                        <button onClick={onAddSection} className="flex items-center justify-center gap-2 w-full py-2 border border-dashed border-gray-300 rounded-lg text-xs font-bold text-gray-400 hover:text-blue-500 hover:border-blue-300 hover:bg-white transition-colors">
                                             <i className="ph-bold ph-plus text-xs"></i> 段落を追加
                                         </button>
                                     </div>
@@ -750,7 +810,7 @@
         };
 
         // --- テキスト注釈ビューペイン ---
-        const AnnotationViewPane = ({ annotation, breadcrumb, childNodes, subAnnotations, activeAnnotationId, selectedChildId, onEdit, onDelete, onClose, onAddChild, onOpenChild, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu }) => {
+        const AnnotationViewPane = ({ annotation, breadcrumb, childNodes, subAnnotations, activeAnnotationId, selectedChildId, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu }) => {
             if (!annotation) return null;
 
             const [quoteCollapsed, setQuoteCollapsed] = useState(true);
@@ -857,20 +917,67 @@
                             </div>
                         )}
                     </div>
-                    {/* 解説パネル */}
-                    <div className="flex-1 overflow-y-auto bg-white" onScroll={onHideSelectionMenu}>
-                        <div className="p-6 md:p-8">
-                            <div className="flex items-center justify-between mb-3">
-                                <div className="text-xs text-green-600 font-bold flex items-center gap-1 uppercase tracking-wider">
-                                    <i className="ph-fill ph-check-circle text-sm"></i> 解説
+                    {/* 解説パネル（段落カード） */}
+                    {(() => {
+                        const sections = annotation.sections || [{ id: annotation.id + '_s', title: '', content: annotation.content || '' }];
+                        return (
+                            <div className="flex-1 overflow-y-auto bg-slate-100" onScroll={onHideSelectionMenu}>
+                                <div className="py-4 flex flex-col gap-3">
+                                    {sections.length > 1 && sections.some(s => s.title) && (
+                                        <div className="mx-4 bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-3">
+                                            <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">目次</div>
+                                            {sections.map((s, i) => (
+                                                <button key={s.id} onClick={() => document.getElementById(`anno-section-${s.id}`)?.scrollIntoView({behavior:'smooth', block:'start'})}
+                                                    className="flex items-center gap-2 w-full text-left py-0.5 group">
+                                                    <span className="text-[10px] text-gray-300 group-hover:text-amber-300 shrink-0">{i+1}.</span>
+                                                    <span className="text-xs text-amber-500 group-hover:text-amber-700 group-hover:underline">
+                                                        {s.title || <span className="text-gray-400 italic">（タイトルなし）</span>}
+                                                    </span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {sections.map((section, i) => (
+                                        <div key={section.id} id={`anno-section-${section.id}`} className="mx-4 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                                            {section.title ? (
+                                                <div className="bg-amber-50 px-6 py-3 border-b-2 border-amber-100 flex items-center justify-between">
+                                                    <h3 className="text-lg font-bold text-amber-900 leading-snug flex-1">{section.title}</h3>
+                                                </div>
+                                            ) : (
+                                                <div className="px-6 pt-4 pb-0">
+                                                    {sections.length > 1 && <div className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-1">段落 {i+1}</div>}
+                                                    {i === 0 && (
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="text-xs text-green-600 font-bold flex items-center gap-1 uppercase tracking-wider"><i className="ph-fill ph-check-circle text-sm"></i> 解説</div>
+                                                            <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded">テキストを選択→注釈を追加</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            <div className="px-6 py-4" onMouseUp={handleMouseUp}>
+                                                <div className="selection:bg-blue-200">
+                                                    <MarkdownViewer content={section.content} annotations={subAnnotations || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} />
+                                                </div>
+                                            </div>
+                                            {i < sections.length - 1 && (
+                                                <div className="border-t border-gray-100 px-6 py-2 flex justify-end">
+                                                    <button onClick={() => document.getElementById(`anno-section-${sections[i+1].id}`)?.scrollIntoView({behavior:'smooth', block:'start'})}
+                                                        className="text-xs text-gray-400 hover:text-amber-500 flex items-center gap-1 transition-colors">
+                                                        次の段落へ <i className="ph-bold ph-arrow-down text-xs"></i>
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                    <div className="mx-4 pb-2">
+                                        <button onClick={onAddSection} className="flex items-center justify-center gap-2 w-full py-2 border border-dashed border-gray-300 rounded-lg text-xs font-bold text-gray-400 hover:text-amber-500 hover:border-amber-300 hover:bg-white transition-colors">
+                                            <i className="ph-bold ph-plus text-xs"></i> 段落を追加
+                                        </button>
+                                    </div>
                                 </div>
-                                <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded">テキストを選択→注釈を追加</span>
                             </div>
-                            <div onMouseUp={handleMouseUp} className="selection:bg-blue-200">
-                                <MarkdownViewer content={annotation.content} annotations={subAnnotations || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} />
-                            </div>
-                        </div>
-                    </div>
+                        );
+                    })()}
                 </div>
             );
         };
@@ -879,7 +986,16 @@
         const AnnotationFormPane = ({ mode, quote, initialData, onSave, onCancel }) => {
             const isAdd = mode === 'add';
             const [title, setTitle] = useState(initialData?.title || '');
-            const [content, setContent] = useState(initialData?.content || '');
+            const [sections, setSections] = useState(() =>
+                (initialData?.sections && initialData.sections.length > 0)
+                    ? initialData.sections
+                    : [{ id: generateId(), title: '', content: initialData?.content || '' }]
+            );
+            const addSection = (afterIndex) => setSections(prev => { const next = [...prev]; next.splice(afterIndex + 1, 0, { id: generateId(), title: '', content: '' }); return next; });
+            const removeSection = (index) => setSections(prev => prev.length <= 1 ? prev : prev.filter((_, i) => i !== index));
+            const moveSection = (index, dir) => setSections(prev => { const t = index + dir; if (t < 0 || t >= prev.length) return prev; const next = [...prev]; [next[index], next[t]] = [next[t], next[index]]; return next; });
+            const updateSection = (index, field, value) => setSections(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s));
+            const hasContent = sections.some(s => s.content.trim());
             return (
                 <div className="flex flex-col h-full bg-slate-50 border-r border-gray-200 shrink-0 w-[90vw] md:w-[50vw] lg:w-[45vw] xl:w-[40vw] relative z-0 shadow-[4px_0_24px_rgba(0,0,0,0.06)] animate-slide-in-right">
                     <div className="p-4 border-b border-gray-200 bg-white flex items-center justify-between shrink-0 shadow-sm z-10">
@@ -898,17 +1014,37 @@
                             <label className="block text-sm font-bold text-gray-600 mb-2">タイトル <span className="text-red-500">*</span></label>
                             <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition-all bg-white shadow-sm text-gray-800" placeholder="例：この概念の具体例" autoFocus />
                         </div>
-                        <div className="flex-1 flex flex-col min-h-[200px]">
-                            <label className="block text-sm font-bold text-gray-600 mb-2 flex justify-between items-end">
+                        <div className="flex flex-col gap-3">
+                            <label className="block text-sm font-bold text-gray-600 flex justify-between items-center">
                                 <span>注釈本文 <span className="text-red-500">*</span></span>
                                 <span className="text-xs text-gray-400 font-normal px-2 py-0.5 bg-gray-200 rounded">Markdown & LaTeX対応</span>
                             </label>
-                            <textarea value={content} onChange={e => setContent(e.target.value)} className="flex-1 w-full border border-gray-300 rounded-lg p-4 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition-all resize-none font-mono text-sm bg-white shadow-sm text-gray-700 leading-relaxed" placeholder="注釈をマークダウン形式で記述します..."></textarea>
+                            {sections.map((section, i) => (
+                                <div key={section.id} className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                                    <div className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 border-b border-amber-100">
+                                        <input type="text" value={section.title} onChange={e => updateSection(i, 'title', e.target.value)}
+                                            className="flex-1 text-xs font-bold text-amber-700 bg-transparent border-none outline-none placeholder-amber-300"
+                                            placeholder="段落タイトル（任意）" />
+                                        <button onClick={() => moveSection(i, -1)} disabled={i === 0} className="p-1 rounded hover:bg-amber-100 disabled:opacity-30 transition-colors text-amber-400" title="上へ"><i className="ph-bold ph-arrow-up text-xs"></i></button>
+                                        <button onClick={() => moveSection(i, 1)} disabled={i === sections.length - 1} className="p-1 rounded hover:bg-amber-100 disabled:opacity-30 transition-colors text-amber-400" title="下へ"><i className="ph-bold ph-arrow-down text-xs"></i></button>
+                                        <button onClick={() => addSection(i)} className="p-1 rounded hover:bg-amber-100 text-amber-300 hover:text-amber-500 transition-colors" title="ここに追加"><i className="ph-bold ph-plus text-xs"></i></button>
+                                        {sections.length > 1 && (
+                                            <button onClick={() => removeSection(i)} className="p-1 rounded hover:bg-red-100 text-gray-300 hover:text-red-500 transition-colors" title="削除"><i className="ph-bold ph-trash text-xs"></i></button>
+                                        )}
+                                    </div>
+                                    <textarea value={section.content} onChange={e => updateSection(i, 'content', e.target.value)}
+                                        className="w-full border-none p-4 focus:ring-2 focus:ring-inset focus:ring-amber-400 outline-none resize-none font-mono text-sm bg-white text-gray-700 leading-relaxed min-h-[120px]"
+                                        placeholder="注釈をマークダウン形式で記述します..." rows={5} />
+                                </div>
+                            ))}
+                            <button onClick={() => addSection(sections.length - 1)} className="flex items-center justify-center gap-2 w-full py-2 border border-dashed border-amber-200 rounded-lg text-xs font-bold text-amber-400 hover:text-amber-600 hover:border-amber-400 hover:bg-amber-50 transition-colors">
+                                <i className="ph-bold ph-plus text-xs"></i> 段落を追加
+                            </button>
                         </div>
                     </div>
                     <div className="p-4 border-t border-gray-200 bg-white flex justify-end gap-3 shrink-0">
                         <button onClick={onCancel} className="px-6 py-2.5 rounded-lg font-bold text-gray-600 hover:bg-gray-100 transition-colors">キャンセル</button>
-                        <button onClick={() => onSave(title, content)} disabled={!title.trim() || !content.trim()} className="px-6 py-2.5 rounded-lg font-bold text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-sm">
+                        <button onClick={() => onSave(title, sections)} disabled={!title.trim() || !hasContent} className="px-6 py-2.5 rounded-lg font-bold text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-sm">
                             <i className="ph-bold ph-check"></i> 保存
                         </button>
                     </div>
@@ -963,7 +1099,7 @@
                 const meta = projectList.find(p => p.id === id);
                 if (data && meta && data.nodes && data.nodes['root']) {
                     setCurrentProjectId(id); setCurrentProjectName(meta.name);
-                    setNodes(migrateNodes(data.nodes)); setAnnotations(data.annotations || []);
+                    setNodes(migrateNodes(data.nodes)); setAnnotations(migrateAnnotations(data.annotations || []));
                     setTreeExpandedIds(new Set(Object.keys(data.nodes).filter(k => k !== 'root')));
                     setAppMode('workspace'); setPanes([{ type: 'view', nodeId: 'root' }]);
                 }
@@ -1068,15 +1204,15 @@
                 window.getSelection()?.removeAllRanges();
             };
 
-            const saveAnnotation = (paneIndex, nodeId, parentAnnotationId, quote, title, content, sectionId) => {
-                const na = { id: generateId(), nodeId: nodeId || null, parentAnnotationId: parentAnnotationId || null, quote, title, content, sectionId: sectionId || null, timestamp: Date.now(), childNodeIds: [] };
+            const saveAnnotation = (paneIndex, nodeId, parentAnnotationId, quote, title, sections, sectionId) => {
+                const na = { id: generateId(), nodeId: nodeId || null, parentAnnotationId: parentAnnotationId || null, quote, title, sections, sectionId: sectionId || null, timestamp: Date.now(), childNodeIds: [] };
                 setAnnotations(prev => [...prev, na]);
                 setPanes(prev => { const next = [...prev]; next[paneIndex] = { type: 'annotation', annotationId: na.id }; return next; });
                 window.getSelection()?.removeAllRanges();
             };
 
-            const updateAnnotation = (paneIndex, annotationId, title, content) => {
-                setAnnotations(prev => prev.map(a => a.id === annotationId ? { ...a, title, content, timestamp: Date.now() } : a));
+            const updateAnnotation = (paneIndex, annotationId, title, sections) => {
+                setAnnotations(prev => prev.map(a => a.id === annotationId ? { ...a, title, sections, timestamp: Date.now() } : a));
                 setPanes(prev => { const next = [...prev]; next[paneIndex] = { type: 'annotation', annotationId }; return next; });
             };
 
@@ -1117,6 +1253,13 @@
                     [nodeId]: { ...prev[nodeId], sections: [...(prev[nodeId].sections || []), { id: generateId(), title: '', content: '' }] }
                 }));
                 setPanes(prev => { const n = [...prev]; n[paneIndex] = { type: 'edit', nodeId }; return n; });
+            };
+            const handleAddAnnotationSection = (paneIndex, annotationId) => {
+                setAnnotations(prev => prev.map(a => a.id === annotationId ? {
+                    ...a,
+                    sections: [...(a.sections || [{ id: generateId(), title: '', content: a.content || '' }]), { id: generateId(), title: '', content: '' }]
+                } : a));
+                setPanes(prev => { const n = [...prev]; n[paneIndex] = { type: 'annotation-edit', annotationId }; return n; });
             };
             const handleTreeExpandAll = () => {
                 setTreeExpandedIds(new Set(Object.keys(nodes).filter(k => k !== 'root')));
@@ -1189,7 +1332,7 @@
                     const id = generateId(); const now = Date.now();
                     const migratedNodes = migrateNodes(proj.nodes || {});
                     newList.unshift({ id, name: proj.name || '名前なし', createdAt: proj.createdAt || now, updatedAt: proj.updatedAt || now, nodeCount: Object.keys(migratedNodes).length, annotationCount: (proj.annotations || []).length, preview: migratedNodes?.root?.sections?.[0]?.content?.substring(0, 100) || '' });
-                    Storage.saveProjectData(id, { nodes: migratedNodes, annotations: proj.annotations || [] });
+                    Storage.saveProjectData(id, { nodes: migratedNodes, annotations: migrateAnnotations(proj.annotations || []) });
                     count++;
                 });
                 Storage.saveProjectList(newList); setProjectList(newList);
@@ -1352,6 +1495,7 @@
                                                 onDelete={() => handleDeleteAnnotation(index, pane.annotationId)}
                                                 onClose={() => setPanes(prev => prev.slice(0, index))}
                                                 onAddChild={() => { setPanes(prev => { const next = prev.slice(0, index + 1); next.push({ type: 'add', parentId: null, parentAnnotationId: pane.annotationId }); return next; }); }}
+                                                onAddSection={() => handleAddAnnotationSection(index, pane.annotationId)}
                                                 onOpenChild={(childId) => { setPanes(prev => { const next = prev.slice(0, index + 1); next.push({ type: 'view', nodeId: childId }); return next; }); }}
                                                 onAnnotateText={(annotationId, quote, rect) => handleAnnotateText(null, annotationId, quote, rect)}
                                                 onAnnotationClick={(annotationId) => openAnnotation(index, annotationId)}
@@ -1367,7 +1511,7 @@
                                                 key={`pane-${index}-annotation-add`}
                                                 mode="add"
                                                 quote={pane.quote}
-                                                onSave={(title, content) => saveAnnotation(index, pane.nodeId, pane.parentAnnotationId, pane.quote, title, content, pane.sectionId)}
+                                                onSave={(title, sections) => saveAnnotation(index, pane.nodeId, pane.parentAnnotationId, pane.quote, title, sections, pane.sectionId)}
                                                 onCancel={() => setPanes(prev => prev.slice(0, index))}
                                             />
                                         );
@@ -1382,7 +1526,7 @@
                                                 mode="edit"
                                                 quote={annotation.quote}
                                                 initialData={annotation}
-                                                onSave={(title, content) => updateAnnotation(index, pane.annotationId, title, content)}
+                                                onSave={(title, sections) => updateAnnotation(index, pane.annotationId, title, sections)}
                                                 onCancel={() => setPanes(prev => { const n = [...prev]; n[index] = { type: 'annotation', annotationId: pane.annotationId }; return n; })}
                                             />
                                         );
