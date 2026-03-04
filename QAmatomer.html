@@ -705,19 +705,19 @@
                                                     <button onClick={() => onAddChild(section.id)} title="このセクションから子ノードを追加" className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors shrink-0"><i className="ph-bold ph-plus text-xs"></i></button>
                                                 </div>
                                             )}
-                                            <div className="px-6 py-4" onMouseUp={handleSectionMouseUp(section.id)}>
-                                                <div className="selection:bg-blue-200">
-                                                    <MarkdownViewer content={section.content} annotations={sectionAnnotations[section.id] || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} />
-                                                </div>
-                                            </div>
                                             {i < node.sections.length - 1 && (
-                                                <div className="border-t border-gray-100 px-6 py-2 flex justify-end">
+                                                <div className="border-b border-gray-100 px-6 py-2 flex justify-end">
                                                     <button onClick={() => scrollToId(`section-${node.sections[i+1].id}`)}
                                                         className="text-xs text-gray-400 hover:text-blue-500 flex items-center gap-1 transition-colors">
                                                         次の段落へ <i className="ph-bold ph-arrow-down text-xs"></i>
                                                     </button>
                                                 </div>
                                             )}
+                                            <div className="px-6 py-4" onMouseUp={handleSectionMouseUp(section.id)}>
+                                                <div className="selection:bg-blue-200">
+                                                    <MarkdownViewer content={section.content} annotations={sectionAnnotations[section.id] || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} />
+                                                </div>
+                                            </div>
                                         </div>
                                     ))}
                                     <div className="mx-4 pb-2">
@@ -970,19 +970,19 @@
                                                     )}
                                                 </div>
                                             )}
-                                            <div className="px-6 py-4" onMouseUp={handleMouseUp}>
-                                                <div className="selection:bg-blue-200">
-                                                    <MarkdownViewer content={section.content} annotations={subAnnotations || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} />
-                                                </div>
-                                            </div>
                                             {i < sections.length - 1 && (
-                                                <div className="border-t border-gray-100 px-6 py-2 flex justify-end">
+                                                <div className="border-b border-gray-100 px-6 py-2 flex justify-end">
                                                     <button onClick={() => scrollToId(`anno-section-${sections[i+1].id}`)}
                                                         className="text-xs text-gray-400 hover:text-amber-500 flex items-center gap-1 transition-colors">
                                                         次の段落へ <i className="ph-bold ph-arrow-down text-xs"></i>
                                                     </button>
                                                 </div>
                                             )}
+                                            <div className="px-6 py-4" onMouseUp={handleMouseUp}>
+                                                <div className="selection:bg-blue-200">
+                                                    <MarkdownViewer content={section.content} annotations={subAnnotations || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} />
+                                                </div>
+                                            </div>
                                         </div>
                                     ))}
                                     <div className="mx-4 pb-2">
