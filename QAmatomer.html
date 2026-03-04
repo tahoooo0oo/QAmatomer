@@ -1045,11 +1045,22 @@
             const handleTreeToggle = (nodeId) => {
                 setTreeExpandedIds(prev => { const next = new Set(prev); next.has(nodeId) ? next.delete(nodeId) : next.add(nodeId); return next; });
             };
+            const buildAncestryPath = (nodeId) => {
+                const path = [];
+                let current = nodes[nodeId];
+                while (current && current.id !== 'root') {
+                    path.unshift(current.id);
+                    current = current.parentId ? nodes[current.parentId] : null;
+                }
+                return path;
+            };
             const handleTreeSelectNode = (nodeId) => {
-                setPanes(prev => [prev[0], { type: 'view', nodeId }]);
+                const path = buildAncestryPath(nodeId);
+                setPanes([{ type: 'view', nodeId: 'root' }, ...path.map(id => ({ type: 'view', nodeId: id }))]);
             };
             const handleTreeSelectAnnotation = (parentNodeId, annotationId) => {
-                setPanes(prev => [prev[0], { type: 'view', nodeId: parentNodeId }, { type: 'annotation', annotationId }]);
+                const path = buildAncestryPath(parentNodeId);
+                setPanes([{ type: 'view', nodeId: 'root' }, ...path.map(id => ({ type: 'view', nodeId: id })), { type: 'annotation', annotationId }]);
             };
 
             // --- パンくず生成 ---
