@@ -105,6 +105,22 @@
 
         const { useState, useEffect, useRef } = React;
         const generateId = () => Math.random().toString(36).substr(2, 9);
+
+        // スクロール可能な親要素内でのみスクロール（scrollIntoViewはページ全体に影響するため使用しない）
+        const scrollToId = (elementId) => {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            let parent = el.parentElement;
+            while (parent && !['auto', 'scroll'].includes(window.getComputedStyle(parent).overflowY)) {
+                parent = parent.parentElement;
+            }
+            if (parent) {
+                const elRect = el.getBoundingClientRect();
+                const parentRect = parent.getBoundingClientRect();
+                parent.scrollTo({ top: parent.scrollTop + elRect.top - parentRect.top - 12, behavior: 'smooth' });
+            }
+        };
+
         const migrateNode = (node) => {
             if (node.sections) return node;
             const { answer, group, ...rest } = node;
@@ -657,7 +673,7 @@
                                         <div className="mx-4 bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-3">
                                             <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">目次</div>
                                             {node.sections.map((s, i) => (
-                                                <button key={s.id} onClick={() => document.getElementById(`section-${s.id}`)?.scrollIntoView({behavior:'smooth', block:'start'})}
+                                                <button key={s.id} onClick={() => scrollToId(`section-${s.id}`)}
                                                     className="flex items-center gap-2 w-full text-left py-0.5 group">
                                                     <span className="text-[10px] text-gray-300 group-hover:text-blue-300 shrink-0">{i+1}.</span>
                                                     <span className="text-xs text-blue-500 group-hover:text-blue-700 group-hover:underline">
@@ -696,7 +712,7 @@
                                             </div>
                                             {i < node.sections.length - 1 && (
                                                 <div className="border-t border-gray-100 px-6 py-2 flex justify-end">
-                                                    <button onClick={() => document.getElementById(`section-${node.sections[i+1].id}`)?.scrollIntoView({behavior:'smooth', block:'start'})}
+                                                    <button onClick={() => scrollToId(`section-${node.sections[i+1].id}`)}
                                                         className="text-xs text-gray-400 hover:text-blue-500 flex items-center gap-1 transition-colors">
                                                         次の段落へ <i className="ph-bold ph-arrow-down text-xs"></i>
                                                     </button>
@@ -927,7 +943,7 @@
                                         <div className="mx-4 bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-3">
                                             <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">目次</div>
                                             {sections.map((s, i) => (
-                                                <button key={s.id} onClick={() => document.getElementById(`anno-section-${s.id}`)?.scrollIntoView({behavior:'smooth', block:'start'})}
+                                                <button key={s.id} onClick={() => scrollToId(`anno-section-${s.id}`)}
                                                     className="flex items-center gap-2 w-full text-left py-0.5 group">
                                                     <span className="text-[10px] text-gray-300 group-hover:text-amber-300 shrink-0">{i+1}.</span>
                                                     <span className="text-xs text-amber-500 group-hover:text-amber-700 group-hover:underline">
@@ -961,7 +977,7 @@
                                             </div>
                                             {i < sections.length - 1 && (
                                                 <div className="border-t border-gray-100 px-6 py-2 flex justify-end">
-                                                    <button onClick={() => document.getElementById(`anno-section-${sections[i+1].id}`)?.scrollIntoView({behavior:'smooth', block:'start'})}
+                                                    <button onClick={() => scrollToId(`anno-section-${sections[i+1].id}`)}
                                                         className="text-xs text-gray-400 hover:text-amber-500 flex items-center gap-1 transition-colors">
                                                         次の段落へ <i className="ph-bold ph-arrow-down text-xs"></i>
                                                     </button>
