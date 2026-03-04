@@ -460,7 +460,7 @@
         };
 
         // --- ViewPane ---
-        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onOpenChild, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId }) => {
+        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onOpenChild, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId }) => {
             const [listCollapsed, setListCollapsed] = useState(!isRoot);
             const groupedChildren = {};
             const ungroupedChildren = [];
@@ -533,13 +533,25 @@
                     </div>
                     {/* 質問一覧パネル — 常に上部に固定、独立スクロール */}
                     <div className={`border-b border-gray-200 bg-gray-50 shrink-0 flex flex-col ${isRoot && !listCollapsed ? 'flex-1' : ''}`}>
-                        <button onClick={() => setListCollapsed(v => !v)} className="w-full px-4 py-1.5 flex items-center gap-1 hover:bg-gray-100 transition-colors shrink-0">
-                            <i className={`ph-bold ph-caret-${listCollapsed ? 'right' : 'down'} text-gray-400 text-xs`}></i>
-                            <i className={`ph-bold ${isRoot ? 'ph-list-bullets' : 'ph-list-dashes'} text-gray-500 text-xs`}></i>
-                            <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">
-                                {isRoot ? `質問一覧 (${node.children.length})` : `注釈・派生する質問 (${node.children.length + (nodeAnnotations?.length || 0)})`}
-                            </span>
-                        </button>
+                        <div className="flex items-center shrink-0">
+                            <button onClick={() => setListCollapsed(v => !v)} className="flex-1 px-4 py-1.5 flex items-center gap-1 hover:bg-gray-100 transition-colors">
+                                <i className={`ph-bold ph-caret-${listCollapsed ? 'right' : 'down'} text-gray-400 text-xs`}></i>
+                                <i className={`ph-bold ${isRoot ? 'ph-list-bullets' : 'ph-list-dashes'} text-gray-500 text-xs`}></i>
+                                <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">
+                                    {isRoot ? `質問一覧 (${node.children.length})` : `注釈・派生する質問 (${node.children.length + (nodeAnnotations?.length || 0)})`}
+                                </span>
+                            </button>
+                            {isRoot && onTreeExpandAll && (
+                                <div className="flex items-center gap-0.5 pr-2">
+                                    <button onClick={onTreeExpandAll} title="全展開" className="p-1 rounded hover:bg-gray-200 transition-colors text-gray-400 hover:text-gray-600">
+                                        <i className="ph-bold ph-arrows-out-simple text-xs"></i>
+                                    </button>
+                                    <button onClick={onTreeCollapseAll} title="全折りたたみ" className="p-1 rounded hover:bg-gray-200 transition-colors text-gray-400 hover:text-gray-600">
+                                        <i className="ph-bold ph-arrows-in-simple text-xs"></i>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                         {!listCollapsed && (
                             <div className={`overflow-y-auto ${isRoot ? 'flex-1' : 'max-h-[22vh]'}`} onScroll={onHideSelectionMenu}>
                                 {isRoot ? (
@@ -903,6 +915,7 @@
                 if (data && meta && data.nodes && data.nodes['root']) {
                     setCurrentProjectId(id); setCurrentProjectName(meta.name);
                     setNodes(data.nodes); setAnnotations(data.annotations || []);
+                    setTreeExpandedIds(new Set(Object.keys(data.nodes).filter(k => k !== 'root')));
                     setAppMode('workspace'); setPanes([{ type: 'view', nodeId: 'root' }]);
                 }
             };
@@ -1048,6 +1061,12 @@
             };
             const handleTreeExpand = (nodeId) => {
                 setTreeExpandedIds(prev => { const next = new Set(prev); next.add(nodeId); return next; });
+            };
+            const handleTreeExpandAll = () => {
+                setTreeExpandedIds(new Set(Object.keys(nodes).filter(k => k !== 'root')));
+            };
+            const handleTreeCollapseAll = () => {
+                setTreeExpandedIds(new Set());
             };
             const buildAncestryPath = (nodeId) => {
                 const path = [];
@@ -1222,6 +1241,8 @@
                                                 treeExpandedIds={isRootPane ? treeExpandedIds : null}
                                                 onTreeToggle={isRootPane ? handleTreeToggle : null}
                                                 onTreeExpand={isRootPane ? handleTreeExpand : null}
+                                                onTreeExpandAll={isRootPane ? handleTreeExpandAll : null}
+                                                onTreeCollapseAll={isRootPane ? handleTreeCollapseAll : null}
                                                 onTreeSelectNode={isRootPane ? handleTreeSelectNode : null}
                                                 onTreeSelectAnnotation={isRootPane ? handleTreeSelectAnnotation : null}
                                                 treeActiveNodeIds={treeActiveNodeIds}
