@@ -603,6 +603,9 @@
         const AnnotationViewPane = ({ annotation, breadcrumb, childNodes, subAnnotations, activeAnnotationId, selectedChildId, onEdit, onDelete, onClose, onAddChild, onOpenChild, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu }) => {
             if (!annotation) return null;
 
+            const [quoteCollapsed, setQuoteCollapsed] = useState(false);
+            const [listCollapsed, setListCollapsed] = useState(false);
+
             const handleMouseUp = () => {
                 setTimeout(() => {
                     const sel = window.getSelection();
@@ -666,40 +669,44 @@
                     </div>
                     {/* 対象テキストパネル */}
                     <div className="border-b border-gray-200 bg-amber-50 shrink-0">
-                        <div className="px-4 py-2 border-b border-amber-100">
-                            <div className="text-xs text-amber-600 font-bold flex items-center gap-1 uppercase tracking-wider">
-                                <i className="ph-bold ph-quotes text-sm"></i> 対象テキスト
-                                {annotation.group && <span className="ml-2 text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium"><i className="ph-fill ph-folder-notch mr-0.5"></i>{annotation.group}</span>}
+                        <button onClick={() => setQuoteCollapsed(v => !v)} className="w-full px-4 py-1.5 flex items-center gap-1 hover:bg-amber-100 transition-colors">
+                            <i className={`ph-bold ph-caret-${quoteCollapsed ? 'right' : 'down'} text-amber-500 text-xs`}></i>
+                            <i className="ph-bold ph-quotes text-amber-600 text-xs"></i>
+                            <span className="text-xs text-amber-600 font-bold uppercase tracking-wider">対象テキスト</span>
+                            {annotation.group && <span className="ml-2 text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium"><i className="ph-fill ph-folder-notch mr-0.5"></i>{annotation.group}</span>}
+                            {quoteCollapsed && <span className="ml-2 text-[11px] text-amber-500 italic truncate max-w-[180px]">{annotation.quote?.substring(0, 40)}{(annotation.quote?.length||0) > 40 ? '…' : ''}</span>}
+                        </button>
+                        {!quoteCollapsed && (
+                            <div className="px-4 pb-2">
+                                <p className="text-xs text-gray-600 italic leading-relaxed bg-white px-3 py-2 rounded border-l-2 border-amber-400 line-clamp-3">{annotation.quote}</p>
                             </div>
-                        </div>
-                        <div className="px-4 py-3">
-                            <p className="text-sm text-gray-700 italic leading-relaxed bg-white p-3 rounded border-l-2 border-amber-400">{annotation.quote}</p>
-                        </div>
+                        )}
                     </div>
                     {/* 注釈・派生する質問パネル */}
                     <div className="border-b border-gray-200 bg-gray-50 shrink-0 flex flex-col">
-                        <div className="px-4 py-2 border-b border-gray-100 shrink-0">
-                            <div className="text-xs text-gray-500 font-bold flex items-center gap-1 uppercase tracking-wider">
-                                <i className="ph-bold ph-list-dashes text-sm"></i>
-                                注釈・派生する質問 ({totalCount})
+                        <button onClick={() => setListCollapsed(v => !v)} className="w-full px-4 py-1.5 flex items-center gap-1 hover:bg-gray-100 transition-colors shrink-0">
+                            <i className={`ph-bold ph-caret-${listCollapsed ? 'right' : 'down'} text-gray-400 text-xs`}></i>
+                            <i className="ph-bold ph-list-dashes text-gray-500 text-xs"></i>
+                            <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">注釈・派生する質問 ({totalCount})</span>
+                        </button>
+                        {!listCollapsed && (
+                            <div className="overflow-y-auto max-h-[14vh]" onScroll={onHideSelectionMenu}>
+                                <div className="px-3 pb-2 space-y-1">
+                                    {totalCount === 0 ? (
+                                        <div className="text-center py-2 opacity-60 bg-white rounded border border-dashed border-gray-300 flex items-center justify-center gap-1.5 min-h-[36px]">
+                                            <i className="ph-fill ph-tree-structure text-sm text-gray-300"></i>
+                                            <p className="text-xs text-gray-400">まだ派生する質問はありません</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {childNodes?.map(childNode => renderChildNode(childNode))}
+                                            {childNodes?.length > 0 && subAnnotations?.length > 0 && <div className="border-t border-gray-200 mt-1 pt-1"></div>}
+                                            {subAnnotations?.map(a => renderSubAnnotationCard(a))}
+                                        </>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                        <div className="overflow-y-auto max-h-[18vh]" onScroll={onHideSelectionMenu}>
-                            <div className="p-3 space-y-1.5">
-                                {totalCount === 0 ? (
-                                    <div className="text-center py-3 opacity-60 bg-white rounded-lg border border-dashed border-gray-300 flex flex-col items-center justify-center min-h-[48px]">
-                                        <i className="ph-fill ph-tree-structure text-xl text-gray-300 mb-1"></i>
-                                        <p className="text-xs text-gray-400">まだ派生する質問はありません</p>
-                                    </div>
-                                ) : (
-                                    <>
-                                        {childNodes?.map(childNode => renderChildNode(childNode))}
-                                        {childNodes?.length > 0 && subAnnotations?.length > 0 && <div className="border-t border-gray-200 mt-1 pt-1"></div>}
-                                        {subAnnotations?.map(a => renderSubAnnotationCard(a))}
-                                    </>
-                                )}
-                            </div>
-                        </div>
+                        )}
                     </div>
                     {/* 解説パネル */}
                     <div className="flex-1 overflow-y-auto bg-white" onScroll={onHideSelectionMenu}>
