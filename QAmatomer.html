@@ -1544,7 +1544,8 @@
                 const data = Storage.getProjectData(id);
                 if (!meta || !data) return;
                 const payload = JSON.stringify({ name: meta.name, nodes: data.nodes || {}, annotations: data.annotations || [] });
-                const injectedScript = `<script id="__snapshot_inject__">window.__SNAPSHOT_DATA__ = ${payload};<\/script>`;
+                // </script> がそのまま現れるとBabel変換後にscriptタグを閉じてしまうため分割
+                const injectedScript = '<script id="__snapshot_inject__">window.__SNAPSHOT_DATA__ = ' + payload + ';<' + '/script>';
                 let currentHtml = document.documentElement.outerHTML;
                 // Reactレンダリング済みDOMを除去（開いた瞬間にHTMLがバーンと表示されるのを防ぐ）
                 currentHtml = currentHtml.replace(/<div id="root">[\s\S]*<\/body>/, '<div id="root"></div>\n</body>');
