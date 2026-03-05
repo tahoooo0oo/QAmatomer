@@ -1657,7 +1657,11 @@ function buildNode(nid,pi){
       return '<div class="ai'+(act?' active':'')+'" data-pi="'+pi+'" data-aid="'+a.id+'"><span class="pin">&#128204;</span><span>'+(a.title||'注釈')+'</span></div>';
     }).join('');
     var tot=n.children.length+annots.length;
-    listH='<div class="plist"><div class="plabel">'+(isRoot?'質問一覧':'派生する質問・注釈')+' ('+tot+')</div><div class="pitems">'+ci+ai+'</div></div>';
+    if(isRoot){
+      listH='<div class="plist"><div class="plabel">質問一覧</div><div class="pitems">'+buildTreeItems('root',0)+'</div></div>';
+    } else {
+      listH='<div class="plist"><div class="plabel">派生する質問・注釈 ('+tot+')</div><div class="pitems">'+ci+ai+'</div></div>';
+    }
   }
   if(!isRoot&&n.sections&&n.sections.some(function(s){return s.content||s.title;})){
     var ts=n.sections.filter(function(s){return s.title;});
@@ -1681,7 +1685,42 @@ function buildAnnot(aid,pi){
   });
   return '<div class="pane annot"><div class="ph"><div class="pt"><span class="pb">&#128204;</span>'+(a.title||'注釈')+'</div><button class="xbtn" data-pi="'+pi+'">&#10005;</button></div>'+(cntH?'<div class="pc">'+cntH+'</div>':'')+'</div>';
 }
+function buildTreeItems(nid,depth){
+  var n=S.nodes[nid]; if(!n) return '';
+  var h='';
+  (n.children||[]).forEach(function(cid){
+    var c=S.nodes[cid]; if(!c) return;
+    var inSt=state.some(function(s){return s.t==='node'&&s.id===cid;});
+    var pl=(depth*1.1+0.7);
+    h+='<div class="ci'+(inSt?' active':'')+' ti" data-cid="'+cid+'" style="padding-left:'+pl+'em"><span class="arr">&#9658;</span><span>'+c.question+'</span></div>';
+    Object.values(S.annotations).filter(function(a){return a.nodeId===cid;}).forEach(function(a){
+      var aSt=state.some(function(s){return s.t==='annot'&&s.id===a.id;});
+      h+='<div class="ai'+(aSt?' active':'')+' ta" data-cid="'+cid+'" data-aid="'+a.id+'" style="padding-left:'+(pl+0.9)+'em"><span class="pin">&#128204;</span><span>'+(a.title||'注釈')+'</span></div>';
+    });
+    h+=buildTreeItems(cid,depth+1);
+  });
+  return h;
+}
 function bindEvents(){
+  C.querySelectorAll('.ti').forEach(function(el){
+    el.addEventListener('click',function(){
+      var path=pathTo(el.dataset.cid);
+      state=[{t:'node',id:'root'}];
+      path.forEach(function(id){state.push({t:'node',id:id});});
+      render();
+      setTimeout(function(){var ps=C.querySelectorAll('.pane');if(ps[path.length])ps[path.length].scrollIntoView({behavior:'smooth',inline:'nearest'});},50);
+    });
+  });
+  C.querySelectorAll('.ta').forEach(function(el){
+    el.addEventListener('click',function(){
+      var path=pathTo(el.dataset.cid);
+      state=[{t:'node',id:'root'}];
+      path.forEach(function(id){state.push({t:'node',id:id});});
+      state.push({t:'annot',id:el.dataset.aid});
+      render();
+      setTimeout(function(){var ps=C.querySelectorAll('.pane');if(ps[path.length+1])ps[path.length+1].scrollIntoView({behavior:'smooth',inline:'nearest'});},50);
+    });
+  });
   C.querySelectorAll('.ci').forEach(function(el){
     el.addEventListener('click',function(){
       var pi=parseInt(el.dataset.pi),id=el.dataset.cid;
@@ -1709,6 +1748,9 @@ function bindEvents(){
     });
   });
 }
+var parentOf={};
+Object.keys(S.nodes).forEach(function(nid){(S.nodes[nid].children||[]).forEach(function(cid){parentOf[cid]=nid;});});
+function pathTo(nid){var p=[],cur=nid;while(cur&&cur!=='root'){p.unshift(cur);cur=parentOf[cur];}return p;}
 render();
 })();`;
 
