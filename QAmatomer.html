@@ -708,7 +708,7 @@
                                                     className="flex items-center gap-2 w-full text-left py-0.5 group">
                                                     <span className="text-[10px] text-gray-300 group-hover:text-blue-300 shrink-0">{i+1}.</span>
                                                     <span className="text-xs text-blue-500 group-hover:text-blue-700 group-hover:underline">
-                                                        {s.title || <span className="text-gray-400 italic">（タイトルなし）</span>}
+                                                        {s.title ? <InlineTitle text={s.title} /> : <span className="text-gray-400 italic">（タイトルなし）</span>}
                                                     </span>
                                                 </button>
                                             ))}
@@ -1005,7 +1005,7 @@
                                                     className="flex items-center gap-2 w-full text-left py-0.5 group">
                                                     <span className="text-[10px] text-gray-300 group-hover:text-amber-300 shrink-0">{i+1}.</span>
                                                     <span className="text-xs text-amber-500 group-hover:text-amber-700 group-hover:underline">
-                                                        {s.title || <span className="text-gray-400 italic">（タイトルなし）</span>}
+                                                        {s.title ? <InlineTitle text={s.title} /> : <span className="text-gray-400 italic">（タイトルなし）</span>}
                                                     </span>
                                                 </button>
                                             ))}
