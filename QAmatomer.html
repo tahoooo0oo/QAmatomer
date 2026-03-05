@@ -107,6 +107,7 @@
 </head>
 <body>
     <div id="root"></div>
+    <script>/* Capture the original HTML before React renders, for snapshot generation */window.__ORIGINAL_HTML__ = document.documentElement.outerHTML;</script>
 
     <script type="text/babel">
 
@@ -1546,10 +1547,11 @@
                 const payload = JSON.stringify({ name: meta.name, nodes: data.nodes || {}, annotations: data.annotations || [] });
                 // NOTE: avoid literal close-script tag in string; split to prevent early tag close
                 const injectedScript = '<script id="__snapshot_inject__">window.__SNAPSHOT_DATA__ = ' + payload + ';<' + '/script>';
-                let currentHtml = document.documentElement.outerHTML;
-                // Reactレンダリング済みDOMを除去（開いた瞬間にHTMLがバーンと表示されるのを防ぐ）
-                currentHtml = currentHtml.replace(/<div id="root">[\s\S]*<\/body>/, '<div id="root"></div>\n</body>');
-                const modified = currentHtml.replace('</head>', injectedScript + '\n</head>');
+                // Use the HTML captured before React rendered (stored in window.__ORIGINAL_HTML__).
+                // This avoids the bug where document.documentElement.outerHTML + regex would
+                // accidentally strip the <script type="text/babel"> tag along with the root div content.
+                const baseHtml = window.__ORIGINAL_HTML__ || document.documentElement.outerHTML;
+                const modified = baseHtml.replace('</head>', injectedScript + '\n</head>');
                 const blob = new Blob([modified], { type: 'text/html;charset=utf-8' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
