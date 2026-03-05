@@ -360,7 +360,7 @@
 
 
         // --- ホーム画面 ---
-        const HomeScreen = ({ projects, onOpen, onCreateNew, onDelete, onExportSingle, onExportAll, onImport, onSnapshot }) => {
+        const HomeScreen = ({ projects, onOpen, onCreateNew, onDelete, onExportSingle, onExportAll, onImport }) => {
             const fileInputRef = useRef(null);
             const handleFileChange = (e) => {
                 const file = e.target.files[0]; if (!file) return;
@@ -416,7 +416,6 @@
                                             </div>
                                             <div className="flex items-center gap-1 ml-4 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button onClick={(e) => { e.stopPropagation(); onExportSingle(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="エクスポート（JSON）"><i className="ph ph-download-simple text-lg"></i></button>
-                                                {onSnapshot && <button onClick={(e) => { e.stopPropagation(); onSnapshot(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-green-600 hover:bg-green-100 transition-colors" title="HTMLスナップショット出力"><i className="ph ph-camera text-lg"></i></button>}
                                                 <button onClick={(e) => { e.stopPropagation(); if(confirm('\u300c'+project.name+'\u300d\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f\u3053\u306e\u64cd\u4f5c\u306f\u5143\u306b\u623b\u305b\u307e\u305b\u3093\u3002')) onDelete(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除"><i className="ph ph-trash text-lg"></i></button>
                                             </div>
                                         </div>
@@ -1538,196 +1537,6 @@
             const exportAllProjects = () => doExport(projectList.map(p => p.id));
             const exportSingleProject = (id) => doExport([id]);
 
-            // --- HTMLスナップショット生成（数式を事前レンダリング、KaTeX CSSのみ埋め込み） ---
-            const generateSnapshot = async (projectId) => {
-                const meta = projectList.find(p => p.id === projectId);
-                const data = Storage.getProjectData(projectId);
-                if (!data) { alert('データが見つかりませんでした。'); return; }
-                const snapNodes = migrateNodes(data.nodes || {});
-                const snapAnnotations = migrateAnnotations(data.annotations || []);
-                const projectName = meta?.name || '名前なし';
-
-                // HTMLエスケープ
-                const esc = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-
-                // マークダウン＋数式をHTMLにレンダリング（DOMを利用して事前変換）
-                const renderMdMath = (text) => {
-                    if (!text) return '';
-                    const tmp = document.createElement('div');
-                    const mathBlocks = [];
-                    let pt = text;
-                    pt = pt.replace(/\$\$([\s\S]+?)\$\$/g, (m, p1) => { const id = `MATHBLOCK${mathBlocks.length}END`; mathBlocks.push({ id, content: `$$${p1}$$` }); return id; });
-                    pt = pt.replace(/\\\[([\s\S]+?)\\\]/g, (m, p1) => { const id = `MATHBLOCK${mathBlocks.length}END`; mathBlocks.push({ id, content: `\\[${p1}\\]` }); return id; });
-                    pt = pt.replace(/\$((?:\\.|[^$\n])+?)\$/g, (m, p1) => { const id = `MATHINLINE${mathBlocks.length}END`; mathBlocks.push({ id, content: `$${p1}$` }); return id; });
-                    pt = pt.replace(/\\\(([\s\S]+?)\\\)/g, (m, p1) => { const id = `MATHINLINE${mathBlocks.length}END`; mathBlocks.push({ id, content: `\\(${p1}\\)` }); return id; });
-                    let html = marked.parse(pt);
-                    mathBlocks.forEach(block => { html = html.replace(block.id, block.content); });
-                    tmp.innerHTML = html;
-                    try {
-                        renderMathInElement(tmp, {
-                            delimiters: [{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],
-                            throwOnError: false
-                        });
-                    } catch(e) {}
-                    return tmp.innerHTML;
-                };
-
-                const renderInline = (text) => {
-                    if (!text) return '';
-                    const tmp = document.createElement('span');
-                    tmp.innerHTML = marked.parseInline(text);
-                    try {
-                        renderMathInElement(tmp, {
-                            delimiters: [{left:'$$',right:'$$',display:false},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}],
-                            throwOnError: false
-                        });
-                    } catch(e) {}
-                    return tmp.innerHTML;
-                };
-
-                // KaTeX CSSを取得してフォントパスをCDN絶対URLに書き換え
-                let katexCss = '';
-                try {
-                    const resp = await fetch('https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css');
-                    if (resp.ok) {
-                        katexCss = await resp.text();
-                        katexCss = katexCss.replace(/url\(fonts\//g, 'url(https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/fonts/');
-                    }
-                } catch(e) {}
-
-                // ノードを再帰的にHTMLへ変換
-                const renderSnapshotNode = (nodeId, depth) => {
-                    const node = snapNodes[nodeId];
-                    if (!node) return '';
-                    if (nodeId === 'root') {
-                        let html = '';
-                        if (node.sections) {
-                            for (const s of node.sections) {
-                                if (s.title) html += `<h2 class="section-title-bar">${renderInline(s.title)}</h2>`;
-                                if (s.content) html += `<div class="markdown-body">${renderMdMath(s.content)}</div>`;
-                            }
-                        }
-                        for (const childId of (node.children || [])) html += renderSnapshotNode(childId, 0);
-                        return html;
-                    }
-                    const hTag = depth === 0 ? 'h2' : depth === 1 ? 'h3' : depth === 2 ? 'h4' : 'h5';
-                    let html = `<div class="qa-node depth-${Math.min(depth, 4)}">`;
-                    html += `<${hTag} class="qa-question"><span class="qa-q-icon">Q</span>${renderInline(node.question)}</${hTag}>`;
-                    if (node.sections && node.sections.some(s => s.content || s.title)) {
-                        html += '<div class="qa-answer">';
-                        const titledSecs = node.sections.filter(s => s.title);
-                        if (node.sections.length > 1 && titledSecs.length > 0) {
-                            html += '<div class="toc"><div class="toc-label">目次</div><ol>';
-                            node.sections.forEach(s => { if (s.title) html += `<li>${renderInline(s.title)}</li>`; });
-                            html += '</ol></div>';
-                        }
-                        for (const s of node.sections) {
-                            if (!s.content && !s.title) continue;
-                            html += '<div class="section-block">';
-                            if (s.title) html += `<div class="section-title-bar">${renderInline(s.title)}</div>`;
-                            if (s.content) html += `<div class="markdown-body">${renderMdMath(s.content)}</div>`;
-                            html += '</div>';
-                        }
-                        html += '</div>';
-                    }
-                    const nodeAnnotations = snapAnnotations.filter(a => a.nodeId === nodeId);
-                    if (nodeAnnotations.length > 0) {
-                        html += '<div class="annotations-block">';
-                        for (const a of nodeAnnotations) {
-                            html += '<div class="annotation-block">';
-                            html += `<div class="annotation-title"><span class="annotation-icon">📌</span>${renderInline(a.title)}</div>`;
-                            if (a.quote) html += `<blockquote class="annotation-quote">${esc(a.quote)}</blockquote>`;
-                            if (a.sections) {
-                                for (const s of a.sections) {
-                                    if (s.title) html += `<div class="section-title-bar">${renderInline(s.title)}</div>`;
-                                    if (s.content) html += `<div class="markdown-body">${renderMdMath(s.content)}</div>`;
-                                }
-                            }
-                            html += '</div>';
-                        }
-                        html += '</div>';
-                    }
-                    for (const childId of (node.children || [])) html += renderSnapshotNode(childId, depth + 1);
-                    html += '</div>';
-                    return html;
-                };
-
-                const bodyContent = renderSnapshotNode('root', 0);
-                const now = new Date().toLocaleString('ja-JP');
-
-                // NOTE: split </style> to prevent early tag close
-                const styleClose = '</' + 'style>';
-                const snapshotHtml = `<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${esc(projectName)}</title>
-<style>
-${katexCss}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;max-width:900px;margin:0 auto;padding:2em 1.5em;color:#1e293b;background:#f8fafc;line-height:1.7}
-.page-header{background:#0f172a;color:white;padding:1.5em 2em;border-radius:12px;margin-bottom:2em}
-.page-header h1{margin:0;font-size:1.6rem;font-weight:800}
-.page-header .meta{margin:.5em 0 0;font-size:.8rem;color:#94a3b8}
-.qa-node{margin:1.5em 0}
-.qa-node.depth-0{background:white;border:1px solid #e2e8f0;border-radius:12px;padding:1.2em 1.5em;box-shadow:0 1px 6px rgba(0,0,0,.05)}
-.qa-node.depth-1{border-left:3px solid #3b82f6;padding-left:1em;margin-left:1em}
-.qa-node.depth-2{border-left:3px solid #8b5cf6;padding-left:1em;margin-left:2em}
-.qa-node.depth-3,.qa-node.depth-4{border-left:2px solid #cbd5e1;padding-left:1em;margin-left:3em}
-.qa-question{margin:0 0 .75em;font-weight:700;color:#0f172a;display:flex;align-items:baseline;gap:.5em}
-h2.qa-question{font-size:1.2rem}h3.qa-question{font-size:1.05rem}h4.qa-question,h5.qa-question{font-size:.95rem}
-.qa-q-icon{background:#3b82f6;color:white;font-size:.7rem;font-weight:800;padding:.1em .45em;border-radius:4px;flex-shrink:0}
-.depth-2 .qa-q-icon{background:#8b5cf6}.depth-3 .qa-q-icon,.depth-4 .qa-q-icon{background:#64748b}
-.section-block{margin-bottom:.75em}
-.section-title-bar{font-size:.8rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4em;padding-bottom:.3em;border-bottom:1px solid #e2e8f0}
-.markdown-body{color:#334155;font-size:.93rem;line-height:1.8}
-.markdown-body h1{font-size:1.4rem;font-weight:700;margin:1.5em 0 .75em;color:#0f172a}
-.markdown-body h2{font-size:1.2rem;font-weight:700;margin:1.5em 0 .75em;color:#1e293b;border-bottom:1px solid #e2e8f0;padding-bottom:.3em}
-.markdown-body h3{font-size:1.05rem;font-weight:600;margin:1.25em 0 .5em;color:#334155}
-.markdown-body p{margin:0 0 1em}.markdown-body p:last-child{margin-bottom:0}
-.markdown-body a{color:#2563eb;text-decoration:underline}
-.markdown-body ul{list-style:disc;padding-left:1.5em;margin-bottom:1em}
-.markdown-body ol{list-style:decimal;padding-left:1.5em;margin-bottom:1em}
-.markdown-body li{margin-bottom:.3em}
-.markdown-body blockquote{border-left:4px solid #cbd5e1;color:#64748b;font-style:italic;margin-bottom:1em;background:#f8fafc;padding:.5em 1em;border-radius:0 .5rem .5rem 0}
-.markdown-body code{background:#f1f5f9;color:#ef4444;padding:.2em .4em;border-radius:.25rem;font-size:.875em;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
-.markdown-body pre{background:#1e293b;color:#f8fafc;padding:1em;border-radius:.5rem;overflow-x:auto;margin-bottom:1em}
-.markdown-body pre code{background:transparent;color:inherit;padding:0}
-.markdown-body table{width:100%;border-collapse:collapse;margin-bottom:1em}
-.markdown-body th,.markdown-body td{border:1px solid #e2e8f0;padding:.5em;text-align:left}
-.markdown-body th{background:#f8fafc;font-weight:600}
-.markdown-body hr{border:none;border-top:1px solid #e2e8f0;margin:1.5em 0}
-.katex-display{margin:1em 0;overflow-x:auto;overflow-y:hidden;padding-bottom:.2em}
-.toc{background:#f1f5f9;border-radius:8px;padding:.8em 1em;margin-bottom:1em;font-size:.85rem}
-.toc-label{font-weight:700;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:.5em}
-.toc ol{margin:0;padding-left:1.5em}.toc li{margin-bottom:.2em;color:#475569}
-.annotations-block{margin-top:.5em}
-.annotation-block{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.75em 1em;margin-bottom:.5em}
-.annotation-title{font-weight:700;font-size:.9rem;color:#92400e;margin-bottom:.4em;display:flex;align-items:baseline;gap:.4em}
-.annotation-quote{margin:0 0 .5em;font-size:.8rem;color:#78350f;font-style:italic;border-left:3px solid #fbbf24;padding:.3em .7em;background:white;border-radius:0 4px 4px 0}
-${styleClose}
-</head>
-<body>
-<div class="page-header">
-  <h1>${esc(projectName)}</h1>
-  <p class="meta">スナップショット | ${esc(now)}</p>
-</div>
-${bodyContent}
-</body>
-</html>`;
-
-                const filename = projectName.replace(/[\s\/\\:*?"<>|]/g, '_').substring(0, 60) + '-snapshot.html';
-                const blob = new Blob([snapshotHtml], { type: 'text/html;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            };
-
             const importProjects = (data) => {
                 if (!data || (data.type !== 'annotator-qa-export' && data.type !== 'annotator-qa-export') || !Array.isArray(data.projects)) {
                     alert('無効なファイル形式です。このツールからエクスポートしたファイルを選択してください。'); return;
@@ -1770,7 +1579,7 @@ ${bodyContent}
                     </header>
 
                     {appMode === 'home' && (
-                        <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onDelete={deleteProject} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImport={importProjects} onSnapshot={generateSnapshot} />
+                        <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onDelete={deleteProject} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImport={importProjects} />
                     )}
                     {appMode === 'setup' && (
                         <SetupScreen initialName={currentProjectName} isNew={!currentProjectId} onSave={handleSetupSave}

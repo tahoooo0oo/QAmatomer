@@ -337,9 +337,30 @@
             return <div ref={contentRef} className={className}></div>;
         };
 
+        // --- InlineTitle (タイトル向けインラインMarkdown+数式レンダラ) ---
+        const InlineTitle = ({ text, className = '' }) => {
+            const ref = useRef(null);
+            useEffect(() => {
+                if (!ref.current) return;
+                const html = text ? marked.parseInline(text) : '';
+                ref.current.innerHTML = html;
+                if (html && window.renderMathInElement) {
+                    renderMathInElement(ref.current, {
+                        delimiters: [
+                            { left: '$$', right: '$$', display: false },
+                            { left: '$', right: '$', display: false },
+                            { left: '\\(', right: '\\)', display: false },
+                        ],
+                        throwOnError: false,
+                    });
+                }
+            }, [text]);
+            return <span ref={ref} className={className}></span>;
+        };
+
 
         // --- ホーム画面 ---
-        const HomeScreen = ({ projects, onOpen, onCreateNew, onDelete, onExportSingle, onExportAll, onImport }) => {
+        const HomeScreen = ({ projects, onOpen, onCreateNew, onDelete, onExportSingle, onExportAll, onImport, onSnapshot }) => {
             const fileInputRef = useRef(null);
             const handleFileChange = (e) => {
                 const file = e.target.files[0]; if (!file) return;
@@ -395,6 +416,7 @@
                                             </div>
                                             <div className="flex items-center gap-1 ml-4 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button onClick={(e) => { e.stopPropagation(); onExportSingle(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="エクスポート（JSON）"><i className="ph ph-download-simple text-lg"></i></button>
+                                                {onSnapshot && <button onClick={(e) => { e.stopPropagation(); onSnapshot(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-green-600 hover:bg-green-100 transition-colors" title="HTMLスナップショット出力"><i className="ph ph-camera text-lg"></i></button>}
                                                 <button onClick={(e) => { e.stopPropagation(); if(confirm('\u300c'+project.name+'\u300d\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f\u3053\u306e\u64cd\u4f5c\u306f\u5143\u306b\u623b\u305b\u307e\u305b\u3093\u3002')) onDelete(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除"><i className="ph ph-trash text-lg"></i></button>
                                             </div>
                                         </div>
@@ -471,7 +493,7 @@
 
 
         // --- ツリーナビゲーション ノードアイテム (再帰) ---
-        const TreeNodeItem = ({ node, level, nodes, annotations, expandedIds, onToggle, onExpand, onSelectNode, onSelectAnnotation, activeNodeIds, activeAnnotationId }) => {
+        const TreeNodeItem = ({ node, level, nodes, annotations, expandedIds, onToggle, onExpand, onSelectNode, onSelectAnnotation, activeNodeIds, activeAnnotationId, onMoveNode }) => {
             const isExpanded = expandedIds.has(node.id);
             const isActive = activeNodeIds.has(node.id);
             const children = node.children.map(id => nodes[id]).filter(Boolean);
@@ -480,24 +502,30 @@
             const pl = 8 + level * 14;
 
             return (
-                <div>
+                <div className="group/treerow">
                     <div
                         onClick={() => { onExpand(node.id); onSelectNode(node.id); }}
                         style={{ paddingLeft: `${pl}px` }}
-                        className={`flex items-center gap-1 py-1.5 pr-2 rounded-md cursor-pointer transition-colors text-xs ${isActive ? 'bg-blue-100 text-blue-800 font-bold' : 'hover:bg-gray-100 text-gray-700'}`}
+                        className={`flex items-center gap-1 py-1.5 pr-1 rounded-md cursor-pointer transition-colors text-xs ${isActive ? 'bg-blue-100 text-blue-800 font-bold' : 'hover:bg-gray-100 text-gray-700'}`}
                     >
                         <span onClick={(e) => { e.stopPropagation(); onToggle(node.id); }} className="w-3 shrink-0 flex items-center justify-center">
                             {hasItems && <i className={`ph-bold ph-caret-${isExpanded ? 'down' : 'right'} text-[9px] ${isActive ? 'text-blue-500' : 'text-gray-400'}`}></i>}
                         </span>
                         <i className={`ph-fill ph-question text-[10px] shrink-0 ${isActive ? 'text-blue-600' : 'text-gray-300'}`}></i>
-                        <span className="truncate leading-snug">{node.question}</span>
+                        <InlineTitle text={node.question} className="truncate leading-snug flex-1 min-w-0" />
+                        {onMoveNode && node.parentId && (
+                            <span className="flex gap-0.5 opacity-0 group-hover/treerow:opacity-100 transition-opacity shrink-0 ml-1" onClick={e => e.stopPropagation()}>
+                                <button onClick={() => onMoveNode(node.id, -1)} title="上へ" className="w-4 h-4 flex items-center justify-center rounded hover:bg-gray-300 text-gray-400 hover:text-gray-700"><i className="ph-bold ph-arrow-up text-[8px]"></i></button>
+                                <button onClick={() => onMoveNode(node.id,  1)} title="下へ" className="w-4 h-4 flex items-center justify-center rounded hover:bg-gray-300 text-gray-400 hover:text-gray-700"><i className="ph-bold ph-arrow-down text-[8px]"></i></button>
+                            </span>
+                        )}
                     </div>
                     {isExpanded && (
                         <>
                             {children.map(child => (
                                 <TreeNodeItem key={child.id} node={child} level={level + 1} nodes={nodes} annotations={annotations}
                                     expandedIds={expandedIds} onToggle={onToggle} onExpand={onExpand} onSelectNode={onSelectNode} onSelectAnnotation={onSelectAnnotation}
-                                    activeNodeIds={activeNodeIds} activeAnnotationId={activeAnnotationId} />
+                                    activeNodeIds={activeNodeIds} activeAnnotationId={activeAnnotationId} onMoveNode={onMoveNode} />
                             ))}
                             {nodeAnnotations.map(anno => {
                                 const isAnnoActive = activeAnnotationId === anno.id;
@@ -509,7 +537,7 @@
                                     >
                                         <span className="w-3 shrink-0"></span>
                                         <i className={`ph-fill ph-highlighter text-[10px] shrink-0 ${isAnnoActive ? 'text-amber-500' : 'text-amber-300'}`}></i>
-                                        <span className="truncate leading-snug">{anno.title}</span>
+                                        <InlineTitle text={anno.title} className="truncate leading-snug" />
                                     </div>
                                 );
                             })}
@@ -520,8 +548,8 @@
         };
 
         // --- ViewPane ---
-        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId, onOpenSearch }) => {
-            const [listCollapsed, setListCollapsed] = useState(false);
+        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, onMoveNode, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId, onOpenSearch }) => {
+            const [listCollapsed, setListCollapsed] = useState(!isRoot);
             const [collapsedSections, setCollapsedSections] = useState(new Set());
             const toggleSection = (sectionId) => setCollapsedSections(prev => { const next = new Set(prev); next.has(sectionId) ? next.delete(sectionId) : next.add(sectionId); return next; });
 
@@ -561,9 +589,15 @@
                 const isChildSelected = selectedChildId === childNode.id;
                 return (
                     <div key={childNode.id} onClick={() => onOpenChild(childNode.id)} className={`px-3 py-2 rounded-lg border transition-all cursor-pointer group bg-white ${isChildSelected ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-sm' : 'border-gray-200 hover:border-blue-300 hover:shadow-sm'}`}>
-                        <div className="font-medium text-gray-800 flex items-start gap-2 text-sm">
-                            <i className={`ph-fill ph-question mt-0.5 shrink-0 text-sm ${isChildSelected ? 'text-blue-600' : 'text-gray-300 group-hover:text-blue-400 transition-colors'}`}></i>
-                            <span className="leading-snug">{childNode.question}</span>
+                        <div className="font-medium text-gray-800 flex items-center gap-2 text-sm">
+                            <i className={`ph-fill ph-question shrink-0 text-sm ${isChildSelected ? 'text-blue-600' : 'text-gray-300 group-hover:text-blue-400 transition-colors'}`}></i>
+                            <InlineTitle text={childNode.question} className="leading-snug flex-1 min-w-0" />
+                            {onMoveNode && (
+                                <span className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={e => e.stopPropagation()}>
+                                    <button onClick={() => onMoveNode(childNode.id, -1)} title="上へ" className="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-200 text-gray-400 hover:text-gray-700"><i className="ph-bold ph-arrow-up text-[10px]"></i></button>
+                                    <button onClick={() => onMoveNode(childNode.id,  1)} title="下へ" className="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-200 text-gray-400 hover:text-gray-700"><i className="ph-bold ph-arrow-down text-[10px]"></i></button>
+                                </span>
+                            )}
                         </div>
                     </div>
                 );
@@ -576,7 +610,7 @@
                         <div className="font-medium text-gray-800 flex items-start gap-2 text-sm">
                             <i className={`ph-fill ph-highlighter mt-0.5 shrink-0 text-sm ${isSelected ? 'text-amber-500' : 'text-amber-300 group-hover:text-amber-400 transition-colors'}`}></i>
                             <div className="flex-1 min-w-0">
-                                <span className="leading-snug block">{annotation.title}</span>
+                                <InlineTitle text={annotation.title} className="leading-snug block" />
                                 {annotation.quote && <span className="text-[11px] text-gray-400 truncate block">「{annotation.quote.substring(0, 40)}{annotation.quote.length > 40 ? '…' : '」'}</span>}
                             </div>
                         </div>
@@ -590,7 +624,7 @@
                     <div className="p-4 border-b border-gray-100 bg-white flex items-start justify-between shrink-0 shadow-sm z-10">
                         <div className="flex items-start gap-3 overflow-hidden flex-1">
                             <i className={`ph-fill ${isRoot ? 'ph-folders text-indigo-500' : 'ph-question text-blue-500'} text-2xl shrink-0 mt-0.5`}></i>
-                            <h2 className={`font-bold text-gray-800 leading-snug ${isRoot ? 'text-xl' : 'text-lg'}`}>{node.question}</h2>
+                            <h2 className={`font-bold text-gray-800 leading-snug ${isRoot ? 'text-xl' : 'text-lg'}`}><InlineTitle text={node.question} /></h2>
                         </div>
                         <div className="flex items-center gap-1 shrink-0 ml-2">
                             {isRoot && onOpenSearch && (
@@ -646,7 +680,8 @@
                                                 onSelectNode={onTreeSelectNode || (() => {})}
                                                 onSelectAnnotation={onTreeSelectAnnotation || (() => {})}
                                                 activeNodeIds={treeActiveNodeIds || new Set()}
-                                                activeAnnotationId={treeActiveAnnotationId} />
+                                                activeAnnotationId={treeActiveAnnotationId}
+                                                onMoveNode={onMoveNode || null} />
                                         ))}
                                     </div>
                                 ) : (
@@ -687,7 +722,7 @@
                                                     className="flex items-center gap-2 w-full text-left py-0.5 group">
                                                     <span className="text-[10px] text-gray-300 group-hover:text-blue-300 shrink-0">{i+1}.</span>
                                                     <span className="text-xs text-blue-500 group-hover:text-blue-700 group-hover:underline">
-                                                        {s.title || <span className="text-gray-400 italic">（タイトルなし）</span>}
+                                                        {s.title ? <InlineTitle text={s.title} /> : <span className="text-gray-400 italic">（タイトルなし）</span>}
                                                     </span>
                                                 </button>
                                             ))}
@@ -700,8 +735,9 @@
                                         <div key={section.id} id={`section-${section.id}`} className="mx-4 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                                             {section.title ? (
                                                 <div className="bg-blue-50 px-6 py-3 border-b-2 border-blue-100 flex items-center justify-between">
-                                                    <h3 className="text-xl font-bold text-blue-900 leading-snug flex-1">{section.title}</h3>
+                                                    <h3 className="text-xl font-bold text-blue-900 leading-snug flex-1"><InlineTitle text={section.title} /></h3>
                                                     <div className="flex items-center gap-1 shrink-0 ml-2">
+                                                        <button onClick={() => onEdit(section.id)} title="この段落を編集" className="w-6 h-6 flex items-center justify-center rounded text-blue-300 hover:text-blue-600 hover:bg-blue-100 transition-colors"><i className="ph ph-pencil-simple text-xs"></i></button>
                                                         <button onClick={() => onAddChild(section.id)} title="このセクションから子ノードを追加" className="w-6 h-6 flex items-center justify-center rounded text-blue-300 hover:text-blue-600 hover:bg-blue-100 transition-colors"><i className="ph-bold ph-plus text-xs"></i></button>
                                                         <button onClick={() => toggleSection(section.id)} title={isSectionCollapsed ? '展開' : '折りたたむ'} className="w-6 h-6 flex items-center justify-center rounded text-blue-300 hover:text-blue-600 hover:bg-blue-100 transition-colors"><i className={`ph-bold ph-caret-${isSectionCollapsed ? 'down' : 'up'} text-xs`}></i></button>
                                                     </div>
@@ -718,6 +754,7 @@
                                                         )}
                                                     </div>
                                                     <div className="flex items-center gap-1 shrink-0">
+                                                        <button onClick={() => onEdit(section.id)} title="この段落を編集" className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"><i className="ph ph-pencil-simple text-xs"></i></button>
                                                         <button onClick={() => onAddChild(section.id)} title="このセクションから子ノードを追加" className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"><i className="ph-bold ph-plus text-xs"></i></button>
                                                         <button onClick={() => toggleSection(section.id)} title={isSectionCollapsed ? '展開' : '折りたたむ'} className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"><i className={`ph-bold ph-caret-${isSectionCollapsed ? 'down' : 'up'} text-xs`}></i></button>
                                                     </div>
@@ -762,7 +799,7 @@
 
 
         // --- Q&A編集ペイン ---
-        const EditPane = ({ mode, isTopLevel, initialQuestion, initialSections, breadcrumb, onSave, onCancel }) => {
+        const EditPane = ({ mode, isTopLevel, initialQuestion, initialSections, breadcrumb, onSave, onCancel, scrollToSectionId }) => {
             const isAdd = mode === 'add';
             const [question, setQuestion] = useState(initialQuestion || '');
             const [sections, setSections] = useState(() =>
@@ -770,6 +807,7 @@
                     ? initialSections
                     : [{ id: generateId(), title: '', content: '' }]
             );
+            const scrollContainerRef = useRef(null);
             const addSection = (afterIndex) => setSections(prev => {
                 const next = [...prev];
                 next.splice(afterIndex + 1, 0, { id: generateId(), title: '', content: '' });
@@ -783,6 +821,17 @@
             });
             const updateSection = (index, field, value) =>
                 setSections(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s));
+            useEffect(() => {
+                if (!scrollToSectionId || !scrollContainerRef.current) return;
+                requestAnimationFrame(() => {
+                    const container = scrollContainerRef.current;
+                    const el = document.getElementById(`edit-section-${scrollToSectionId}`);
+                    if (!el || !container) return;
+                    const containerRect = container.getBoundingClientRect();
+                    const elRect = el.getBoundingClientRect();
+                    container.scrollTop += elRect.top - containerRect.top - 16;
+                });
+            }, []);
             return (
                 <div className="flex flex-col h-full bg-slate-50 border-r border-gray-200 shrink-0 w-[90vw] md:w-[50vw] lg:w-[45vw] xl:w-[40vw] relative z-0 shadow-[4px_0_24px_rgba(0,0,0,0.06)] animate-slide-in-right">
                     {breadcrumb.length > 0 && <BreadcrumbTrail path={breadcrumb} />}
@@ -793,7 +842,7 @@
                         </div>
                         <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 transition-colors"><i className="ph-bold ph-x text-lg"></i></button>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+                    <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
                         <div>
                             <label className="block text-sm font-bold text-gray-600 mb-2 flex items-center gap-1">
                                 <i className="ph-fill ph-question text-blue-500"></i> 質問 <span className="text-red-500">*</span>
@@ -806,7 +855,7 @@
                                 <span className="text-xs text-gray-400 font-normal px-2 py-0.5 bg-gray-200 rounded">Markdown & LaTeX対応</span>
                             </label>
                             {sections.map((section, i) => (
-                                <div key={section.id} className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                                <div key={section.id} id={`edit-section-${section.id}`} className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
                                     <div className="flex items-center gap-1 px-3 py-1.5 bg-gray-50 border-b border-gray-200">
                                         <input
                                             type="text"
@@ -851,7 +900,7 @@
             if (!annotation) return null;
 
             const [quoteCollapsed, setQuoteCollapsed] = useState(true);
-            const [listCollapsed, setListCollapsed] = useState(false);
+            const [listCollapsed, setListCollapsed] = useState(true);
             const [collapsedSections, setCollapsedSections] = useState(new Set());
             const toggleSection = (sectionId) => setCollapsedSections(prev => { const next = new Set(prev); next.has(sectionId) ? next.delete(sectionId) : next.add(sectionId); return next; });
 
@@ -874,7 +923,7 @@
                     <div key={childNode.id} onClick={() => onOpenChild(childNode.id)} className={`px-3 py-2 rounded-lg border transition-all cursor-pointer group bg-white ${isChildSelected ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-sm' : 'border-gray-200 hover:border-blue-300 hover:shadow-sm'}`}>
                         <div className="font-medium text-gray-800 flex items-start gap-2 text-sm">
                             <i className={`ph-fill ph-question mt-0.5 shrink-0 text-sm ${isChildSelected ? 'text-blue-600' : 'text-gray-300 group-hover:text-blue-400 transition-colors'}`}></i>
-                            <span className="leading-snug">{childNode.question}</span>
+                            <InlineTitle text={childNode.question} className="leading-snug" />
                         </div>
                     </div>
                 );
@@ -887,7 +936,7 @@
                         <div className="font-medium text-gray-800 flex items-start gap-2 text-sm">
                             <i className={`ph-fill ph-highlighter mt-0.5 shrink-0 text-sm ${isSelected ? 'text-amber-500' : 'text-amber-300 group-hover:text-amber-400 transition-colors'}`}></i>
                             <div className="flex-1 min-w-0">
-                                <span className="leading-snug block">{anno.title}</span>
+                                <InlineTitle text={anno.title} className="leading-snug block" />
                                 {anno.quote && <span className="text-[11px] text-gray-400 truncate block">「{anno.quote.substring(0, 40)}{anno.quote.length > 40 ? '…' : '」'}</span>}
                             </div>
                         </div>
@@ -903,7 +952,7 @@
                     <div className="p-4 border-b border-gray-100 bg-white flex items-start justify-between shrink-0 shadow-sm z-10">
                         <div className="flex items-start gap-3 overflow-hidden flex-1">
                             <i className="ph-fill ph-highlighter text-amber-500 text-2xl shrink-0 mt-0.5"></i>
-                            <h2 className="font-bold text-gray-800 leading-snug text-lg">{annotation.title}</h2>
+                            <h2 className="font-bold text-gray-800 leading-snug text-lg"><InlineTitle text={annotation.title} /></h2>
                         </div>
                         <div className="flex items-center gap-1 shrink-0 ml-2">
                             <button onClick={onAddChild} className="px-2.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 hover:border-blue-300 transition-colors flex items-center gap-1" title="質問を追加">
@@ -970,7 +1019,7 @@
                                                     className="flex items-center gap-2 w-full text-left py-0.5 group">
                                                     <span className="text-[10px] text-gray-300 group-hover:text-amber-300 shrink-0">{i+1}.</span>
                                                     <span className="text-xs text-amber-500 group-hover:text-amber-700 group-hover:underline">
-                                                        {s.title || <span className="text-gray-400 italic">（タイトルなし）</span>}
+                                                        {s.title ? <InlineTitle text={s.title} /> : <span className="text-gray-400 italic">（タイトルなし）</span>}
                                                     </span>
                                                 </button>
                                             ))}
@@ -982,7 +1031,7 @@
                                         <div key={section.id} id={`anno-section-${section.id}`} className="mx-4 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                                             {section.title ? (
                                                 <div className="bg-amber-50 px-6 py-3 border-b-2 border-amber-100 flex items-center justify-between">
-                                                    <h3 className="text-lg font-bold text-amber-900 leading-snug flex-1">{section.title}</h3>
+                                                    <h3 className="text-lg font-bold text-amber-900 leading-snug flex-1"><InlineTitle text={section.title} /></h3>
                                                     <button onClick={() => toggleSection(section.id)} title={isSectionCollapsed ? '展開' : '折りたたむ'} className="w-6 h-6 flex items-center justify-center rounded text-amber-300 hover:text-amber-600 hover:bg-amber-100 transition-colors shrink-0 ml-2"><i className={`ph-bold ph-caret-${isSectionCollapsed ? 'down' : 'up'} text-xs`}></i></button>
                                                 </div>
                                             ) : (
@@ -1400,12 +1449,26 @@
             const handleTreeExpand = (nodeId) => {
                 setTreeExpandedIds(prev => { const next = new Set(prev); next.add(nodeId); return next; });
             };
+            const handleMoveNode = (nodeId, dir) => {
+                const n = nodes[nodeId];
+                if (!n || !n.parentId) return;
+                const parent = nodes[n.parentId];
+                if (!parent) return;
+                const idx = parent.children.indexOf(nodeId);
+                if (idx === -1) return;
+                const newIdx = idx + dir;
+                if (newIdx < 0 || newIdx >= parent.children.length) return;
+                const next = [...parent.children];
+                [next[idx], next[newIdx]] = [next[newIdx], next[idx]];
+                setNodes(prev => ({ ...prev, [n.parentId]: { ...prev[n.parentId], children: next } }));
+            };
             const handleAddSection = (paneIndex, nodeId) => {
+                const newSectionId = generateId();
                 setNodes(prev => ({
                     ...prev,
-                    [nodeId]: { ...prev[nodeId], sections: [...(prev[nodeId].sections || []), { id: generateId(), title: '', content: '' }] }
+                    [nodeId]: { ...prev[nodeId], sections: [...(prev[nodeId].sections || []), { id: newSectionId, title: '', content: '' }] }
                 }));
-                setPanes(prev => { const n = [...prev]; n[paneIndex] = { type: 'edit', nodeId }; return n; });
+                setPanes(prev => { const n = [...prev]; n[paneIndex] = { type: 'edit', nodeId, scrollToSectionId: newSectionId }; return n; });
             };
             const handleAddAnnotationSection = (paneIndex, annotationId) => {
                 setAnnotations(prev => prev.map(a => a.id === annotationId ? {
@@ -1475,6 +1538,190 @@
             const exportAllProjects = () => doExport(projectList.map(p => p.id));
             const exportSingleProject = (id) => doExport([id]);
 
+            // --- HTMLスナップショット生成（数式を事前レンダリング、KaTeX CSSのみ埋め込み） ---
+            const generateSnapshot = async (projectId) => {
+                const meta = projectList.find(p => p.id === projectId);
+                const data = Storage.getProjectData(projectId);
+                if (!data) { alert('データが見つかりませんでした。'); return; }
+                const snapNodes = migrateNodes(data.nodes || {});
+                const snapAnnotations = migrateAnnotations(data.annotations || []);
+                const projectName = meta?.name || '名前なし';
+
+                const esc = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+                const renderMdMath = (text) => {
+                    if (!text) return '';
+                    const tmp = document.createElement('div');
+                    const mathBlocks = [];
+                    let pt = text;
+                    pt = pt.replace(/\$\$([\s\S]+?)\$\$/g, (m, p1) => { const id = `MATHBLOCK${mathBlocks.length}END`; mathBlocks.push({ id, content: `$$${p1}$$` }); return id; });
+                    pt = pt.replace(/\\\[([\s\S]+?)\\\]/g, (m, p1) => { const id = `MATHBLOCK${mathBlocks.length}END`; mathBlocks.push({ id, content: `\\[${p1}\\]` }); return id; });
+                    pt = pt.replace(/\$((?:\\.|[^$\n])+?)\$/g, (m, p1) => { const id = `MATHINLINE${mathBlocks.length}END`; mathBlocks.push({ id, content: `$${p1}$` }); return id; });
+                    pt = pt.replace(/\\\(([\s\S]+?)\\\)/g, (m, p1) => { const id = `MATHINLINE${mathBlocks.length}END`; mathBlocks.push({ id, content: `\\(${p1}\\)` }); return id; });
+                    let html = marked.parse(pt);
+                    mathBlocks.forEach(block => { html = html.replace(block.id, block.content); });
+                    tmp.innerHTML = html;
+                    try {
+                        renderMathInElement(tmp, {
+                            delimiters: [{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false},{left:'\\[',right:'\\]',display:true}],
+                            throwOnError: false
+                        });
+                    } catch(e) {}
+                    return tmp.innerHTML;
+                };
+
+                const renderInline = (text) => {
+                    if (!text) return '';
+                    const tmp = document.createElement('span');
+                    tmp.innerHTML = marked.parseInline(text);
+                    try {
+                        renderMathInElement(tmp, {
+                            delimiters: [{left:'$$',right:'$$',display:false},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}],
+                            throwOnError: false
+                        });
+                    } catch(e) {}
+                    return tmp.innerHTML;
+                };
+
+                let katexCss = '';
+                try {
+                    const resp = await fetch('https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css');
+                    if (resp.ok) {
+                        katexCss = await resp.text();
+                        katexCss = katexCss.replace(/url\(fonts\//g, 'url(https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/fonts/');
+                    }
+                } catch(e) {}
+
+                const renderSnapshotNode = (nodeId, depth) => {
+                    const node = snapNodes[nodeId];
+                    if (!node) return '';
+                    if (nodeId === 'root') {
+                        let html = '';
+                        if (node.sections) {
+                            for (const s of node.sections) {
+                                if (s.title) html += `<h2 class="section-title-bar">${renderInline(s.title)}</h2>`;
+                                if (s.content) html += `<div class="markdown-body">${renderMdMath(s.content)}</div>`;
+                            }
+                        }
+                        for (const childId of (node.children || [])) html += renderSnapshotNode(childId, 0);
+                        return html;
+                    }
+                    const hTag = depth === 0 ? 'h2' : depth === 1 ? 'h3' : depth === 2 ? 'h4' : 'h5';
+                    let html = `<div class="qa-node depth-${Math.min(depth, 4)}">`;
+                    html += `<${hTag} class="qa-question"><span class="qa-q-icon">Q</span>${renderInline(node.question)}</${hTag}>`;
+                    if (node.sections && node.sections.some(s => s.content || s.title)) {
+                        html += '<div class="qa-answer">';
+                        const titledSecs = node.sections.filter(s => s.title);
+                        if (node.sections.length > 1 && titledSecs.length > 0) {
+                            html += '<div class="toc"><div class="toc-label">目次</div><ol>';
+                            node.sections.forEach(s => { if (s.title) html += `<li>${renderInline(s.title)}</li>`; });
+                            html += '</ol></div>';
+                        }
+                        for (const s of node.sections) {
+                            if (!s.content && !s.title) continue;
+                            html += '<div class="section-block">';
+                            if (s.title) html += `<div class="section-title-bar">${renderInline(s.title)}</div>`;
+                            if (s.content) html += `<div class="markdown-body">${renderMdMath(s.content)}</div>`;
+                            html += '</div>';
+                        }
+                        html += '</div>';
+                    }
+                    const nodeAnnotations = snapAnnotations.filter(a => a.nodeId === nodeId);
+                    if (nodeAnnotations.length > 0) {
+                        html += '<div class="annotations-block">';
+                        for (const a of nodeAnnotations) {
+                            html += '<div class="annotation-block">';
+                            html += `<div class="annotation-title"><span class="annotation-icon">📌</span>${renderInline(a.title)}</div>`;
+                            if (a.quote) html += `<blockquote class="annotation-quote">${esc(a.quote)}</blockquote>`;
+                            if (a.sections) {
+                                for (const s of a.sections) {
+                                    if (s.title) html += `<div class="section-title-bar">${renderInline(s.title)}</div>`;
+                                    if (s.content) html += `<div class="markdown-body">${renderMdMath(s.content)}</div>`;
+                                }
+                            }
+                            html += '</div>';
+                        }
+                        html += '</div>';
+                    }
+                    for (const childId of (node.children || [])) html += renderSnapshotNode(childId, depth + 1);
+                    html += '</div>';
+                    return html;
+                };
+
+                const bodyContent = renderSnapshotNode('root', 0);
+                const now = new Date().toLocaleString('ja-JP');
+                const styleClose = '</' + 'style>';
+                const snapshotHtml = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${esc(projectName)}</title>
+<style>
+${katexCss}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;max-width:900px;margin:0 auto;padding:2em 1.5em;color:#1e293b;background:#f8fafc;line-height:1.7}
+.page-header{background:#0f172a;color:white;padding:1.5em 2em;border-radius:12px;margin-bottom:2em}
+.page-header h1{margin:0;font-size:1.6rem;font-weight:800}
+.page-header .meta{margin:.5em 0 0;font-size:.8rem;color:#94a3b8}
+.qa-node{margin:1.5em 0}
+.qa-node.depth-0{background:white;border:1px solid #e2e8f0;border-radius:12px;padding:1.2em 1.5em;box-shadow:0 1px 6px rgba(0,0,0,.05)}
+.qa-node.depth-1{border-left:3px solid #3b82f6;padding-left:1em;margin-left:1em}
+.qa-node.depth-2{border-left:3px solid #8b5cf6;padding-left:1em;margin-left:2em}
+.qa-node.depth-3,.qa-node.depth-4{border-left:2px solid #cbd5e1;padding-left:1em;margin-left:3em}
+.qa-question{margin:0 0 .75em;font-weight:700;color:#0f172a;display:flex;align-items:baseline;gap:.5em}
+h2.qa-question{font-size:1.2rem}h3.qa-question{font-size:1.05rem}h4.qa-question,h5.qa-question{font-size:.95rem}
+.qa-q-icon{background:#3b82f6;color:white;font-size:.7rem;font-weight:800;padding:.1em .45em;border-radius:4px;flex-shrink:0}
+.depth-2 .qa-q-icon{background:#8b5cf6}.depth-3 .qa-q-icon,.depth-4 .qa-q-icon{background:#64748b}
+.section-block{margin-bottom:.75em}
+.section-title-bar{font-size:.8rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4em;padding-bottom:.3em;border-bottom:1px solid #e2e8f0}
+.markdown-body{color:#334155;font-size:.93rem;line-height:1.8}
+.markdown-body h1{font-size:1.4rem;font-weight:700;margin:1.5em 0 .75em;color:#0f172a}
+.markdown-body h2{font-size:1.2rem;font-weight:700;margin:1.5em 0 .75em;color:#1e293b;border-bottom:1px solid #e2e8f0;padding-bottom:.3em}
+.markdown-body h3{font-size:1.05rem;font-weight:600;margin:1.25em 0 .5em;color:#334155}
+.markdown-body p{margin:0 0 1em}.markdown-body p:last-child{margin-bottom:0}
+.markdown-body a{color:#2563eb;text-decoration:underline}
+.markdown-body ul{list-style:disc;padding-left:1.5em;margin-bottom:1em}
+.markdown-body ol{list-style:decimal;padding-left:1.5em;margin-bottom:1em}
+.markdown-body li{margin-bottom:.3em}
+.markdown-body blockquote{border-left:4px solid #cbd5e1;color:#64748b;font-style:italic;margin-bottom:1em;background:#f8fafc;padding:.5em 1em;border-radius:0 .5rem .5rem 0}
+.markdown-body code{background:#f1f5f9;color:#ef4444;padding:.2em .4em;border-radius:.25rem;font-size:.875em;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+.markdown-body pre{background:#1e293b;color:#f8fafc;padding:1em;border-radius:.5rem;overflow-x:auto;margin-bottom:1em}
+.markdown-body pre code{background:transparent;color:inherit;padding:0}
+.markdown-body table{width:100%;border-collapse:collapse;margin-bottom:1em}
+.markdown-body th,.markdown-body td{border:1px solid #e2e8f0;padding:.5em;text-align:left}
+.markdown-body th{background:#f8fafc;font-weight:600}
+.markdown-body hr{border:none;border-top:1px solid #e2e8f0;margin:1.5em 0}
+.katex-display{margin:1em 0;overflow-x:auto;overflow-y:hidden;padding-bottom:.2em}
+.toc{background:#f1f5f9;border-radius:8px;padding:.8em 1em;margin-bottom:1em;font-size:.85rem}
+.toc-label{font-weight:700;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:.5em}
+.toc ol{margin:0;padding-left:1.5em}.toc li{margin-bottom:.2em;color:#475569}
+.annotations-block{margin-top:.5em}
+.annotation-block{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.75em 1em;margin-bottom:.5em}
+.annotation-title{font-weight:700;font-size:.9rem;color:#92400e;margin-bottom:.4em;display:flex;align-items:baseline;gap:.4em}
+.annotation-quote{margin:0 0 .5em;font-size:.8rem;color:#78350f;font-style:italic;border-left:3px solid #fbbf24;padding:.3em .7em;background:white;border-radius:0 4px 4px 0}
+${styleClose}
+</head>
+<body>
+<div class="page-header">
+  <h1>${esc(projectName)}</h1>
+  <p class="meta">スナップショット | ${esc(now)}</p>
+</div>
+${bodyContent}
+</body>
+</html>`;
+
+                const filename = projectName.replace(/[\s\/\\:*?"<>|]/g, '_').substring(0, 60) + '-snapshot.html';
+                const blob = new Blob([snapshotHtml], { type: 'text/html;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
+
             const importProjects = (data) => {
                 if (!data || (data.type !== 'annotator-qa-export' && data.type !== 'annotator-qa-export') || !Array.isArray(data.projects)) {
                     alert('無効なファイル形式です。このツールからエクスポートしたファイルを選択してください。'); return;
@@ -1517,7 +1764,7 @@
                     </header>
 
                     {appMode === 'home' && (
-                        <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onDelete={deleteProject} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImport={importProjects} />
+                        <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onDelete={deleteProject} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImport={importProjects} onSnapshot={generateSnapshot} />
                     )}
                     {appMode === 'setup' && (
                         <SetupScreen initialName={currentProjectName} isNew={!currentProjectId} onSave={handleSetupSave}
@@ -1636,15 +1883,16 @@
                                                 onAnnotationClick={(annotationId) => openAnnotation(index, annotationId)}
                                                 onMarkHover={(h, t, r) => { if (h && r) setTooltip({ show: true, text: t, top: r.top - 8, left: r.left + r.width / 2 }); else setTooltip({ show: false }); }}
                                                 onHideSelectionMenu={hideSelectionMenu}
-                                                onEdit={() => {
+                                                onEdit={(sectionId) => {
                                                     if (pane.nodeId === 'root') { setAppMode('setup'); }
-                                                    else { setPanes(prev => { const n = [...prev]; n[index] = { type: 'edit', nodeId: pane.nodeId }; return n; }); }
+                                                    else { setPanes(prev => { const n = [...prev]; n[index] = { type: 'edit', nodeId: pane.nodeId, scrollToSectionId: sectionId || null }; return n; }); }
                                                 }}
                                                 onDelete={() => handleDeleteNode(index, pane.nodeId, node.parentId, node.parentAnnotationId)}
                                                 onClose={() => setPanes(prev => prev.slice(0, index))}
                                                 onAddChild={(_sectionId) => { setPanes(prev => { const next = prev.slice(0, index + 1); next.push({ type: 'add', parentId: pane.nodeId, parentAnnotationId: null }); return next; }); }}
                                                 onAddSection={() => handleAddSection(index, pane.nodeId)}
                                                 onOpenChild={(childId) => { setPanes(prev => { const next = prev.slice(0, index + 1); next.push({ type: 'view', nodeId: childId }); return next; }); }}
+                                                onMoveNode={handleMoveNode}
                                                 allNodes={nodes}
                                                 allAnnotations={isRootPane ? annotations : null}
                                                 treeExpandedIds={isRootPane ? treeExpandedIds : null}
@@ -1667,12 +1915,13 @@
                                         const isTopLevel = isAdd ? pane.parentId === 'root' && !pane.parentAnnotationId : false;
                                         return (
                                             <EditPane
-                                                key={`pane-${index}-${pane.type}`}
+                                                key={`pane-${index}-${pane.type}-${pane.scrollToSectionId || ''}`}
                                                 mode={pane.type}
                                                 isTopLevel={isTopLevel}
                                                 initialQuestion={node?.question || ''}
                                                 initialSections={node?.sections || null}
                                                 breadcrumb={breadcrumb}
+                                                scrollToSectionId={pane.scrollToSectionId || null}
                                                 onSave={(q, sections) => handleSaveNode(index, pane.type, isAdd ? pane.parentId : pane.nodeId, isAdd ? (pane.parentAnnotationId || null) : null, q, sections)}
                                                 onCancel={() => {
                                                     if (isAdd) setPanes(prev => prev.slice(0, index));
