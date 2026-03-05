@@ -1621,7 +1621,7 @@
                     }
                 } catch(e) {}
 
-                // </script> がJSONに含まれていてもスクリプトタグを壊さないようエスケープ
+                // JSONに <\/script が含まれていてもスクリプトタグを壊さないようエスケープ
                 const dataJson = JSON.stringify({ name: projectName, nodes: preNodes, annotations: preAnnotations })
                     .replace(/<\/script/gi, '<\\/script');
 
