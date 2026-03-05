@@ -97,9 +97,6 @@
         .anno-list-item:hover { background: rgba(59,130,246,0.08); }
         .anno-list-item.active { background: rgba(59,130,246,0.12); border-left-color: #3b82f6; }
 
-        /* ノード間リンク [[...]] */
-        .node-link { color: #2563eb; text-decoration: underline; cursor: pointer; border-radius: 2px; padding: 0 2px; transition: background 0.15s; }
-        .node-link:hover { background: rgba(37,99,235,0.1); }
 
         /* 検索ハイライト */
         .search-highlight { background: rgba(250, 204, 21, 0.5); border-radius: 2px; font-weight: bold; }
@@ -107,7 +104,6 @@
 </head>
 <body>
     <div id="root"></div>
-    <script>/* Capture the original HTML before React renders, for snapshot generation */window.__ORIGINAL_HTML__ = document.documentElement.outerHTML;</script>
 
     <script type="text/babel">
 
@@ -190,7 +186,7 @@
         };
 
         // --- MarkdownViewer (注釈ハイライト対応) ---
-        const MarkdownViewer = ({ content, className = "markdown-body", annotations = [], onMarkClick, onMarkHover, activeAnnotationId, allNodes, onNodeLinkClick }) => {
+        const MarkdownViewer = ({ content, className = "markdown-body", annotations = [], onMarkClick, onMarkHover, activeAnnotationId }) => {
             const contentRef = useRef(null);
             const callbacksRef = useRef({ onMarkClick, onMarkHover });
             useEffect(() => { callbacksRef.current = { onMarkClick, onMarkHover }; }, [onMarkClick, onMarkHover]);
@@ -337,67 +333,13 @@
                 }
             }, [activeAnnotationId]);
 
-            // [[...]] ノード間リンク処理
-            useEffect(() => {
-                const root = contentRef.current;
-                if (!root || !allNodes || !onNodeLinkClick) return;
-                // 既存のnode-linkを解除
-                root.querySelectorAll('.node-link').forEach(el => {
-                    const p = el.parentNode;
-                    while (el.firstChild) p.insertBefore(el.firstChild, el);
-                    p.removeChild(el);
-                });
-                root.normalize();
-
-                const nodeEntries = Object.values(allNodes).filter(n => n.id !== 'root');
-                if (nodeEntries.length === 0) return;
-
-                const pattern = /\[\[(.+?)\]\]/g;
-
-                const processTextNode = (textNode) => {
-                    const text = textNode.textContent;
-                    if (!text.includes('[[')) return;
-                    const frag = document.createDocumentFragment();
-                    let lastIndex = 0;
-                    let match;
-                    pattern.lastIndex = 0;
-                    while ((match = pattern.exec(text)) !== null) {
-                        const linkText = match[1];
-                        // exact match first, then case-insensitive substring
-                        let targetNode = nodeEntries.find(n => n.question === linkText);
-                        if (!targetNode) targetNode = nodeEntries.find(n => n.question.toLowerCase().includes(linkText.toLowerCase()));
-                        if (lastIndex < match.index) frag.appendChild(document.createTextNode(text.substring(lastIndex, match.index)));
-                        if (targetNode) {
-                            const span = document.createElement('span');
-                            span.className = 'node-link';
-                            span.textContent = match[0];
-                            span.dataset.nodeId = targetNode.id;
-                            span.onclick = (e) => { e.preventDefault(); e.stopPropagation(); onNodeLinkClick(targetNode.id); };
-                            frag.appendChild(span);
-                        } else {
-                            frag.appendChild(document.createTextNode(match[0]));
-                        }
-                        lastIndex = match.index + match[0].length;
-                    }
-                    if (lastIndex < text.length) frag.appendChild(document.createTextNode(text.substring(lastIndex)));
-                    if (lastIndex > 0) textNode.parentNode.replaceChild(frag, textNode);
-                };
-
-                const walkForLinks = (node) => {
-                    if (node.nodeType === 3) { processTextNode(node); return; }
-                    if (node.nodeType !== 1) return;
-                    if (node.classList && (node.classList.contains('annotation-mark') || node.classList.contains('node-link'))) return;
-                    Array.from(node.childNodes).forEach(walkForLinks);
-                };
-                walkForLinks(root);
-            }, [content, allNodes, onNodeLinkClick]);
 
             return <div ref={contentRef} className={className}></div>;
         };
 
 
         // --- ホーム画面 ---
-        const HomeScreen = ({ projects, onOpen, onCreateNew, onDelete, onExportSingle, onExportAll, onImport, onSnapshot }) => {
+        const HomeScreen = ({ projects, onOpen, onCreateNew, onDelete, onExportSingle, onExportAll, onImport }) => {
             const fileInputRef = useRef(null);
             const handleFileChange = (e) => {
                 const file = e.target.files[0]; if (!file) return;
@@ -452,7 +394,6 @@
                                                 {project.preview && <p className="mt-3 text-sm text-gray-500 line-clamp-2 leading-relaxed">{project.preview}</p>}
                                             </div>
                                             <div className="flex items-center gap-1 ml-4 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={(e) => { e.stopPropagation(); onSnapshot(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-green-600 hover:bg-green-100 transition-colors" title="スナップショットHTMLを生成"><i className="ph ph-camera text-lg"></i></button>
                                                 <button onClick={(e) => { e.stopPropagation(); onExportSingle(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="エクスポート（JSON）"><i className="ph ph-download-simple text-lg"></i></button>
                                                 <button onClick={(e) => { e.stopPropagation(); if(confirm('\u300c'+project.name+'\u300d\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f\u3053\u306e\u64cd\u4f5c\u306f\u5143\u306b\u623b\u305b\u307e\u305b\u3093\u3002')) onDelete(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除"><i className="ph ph-trash text-lg"></i></button>
                                             </div>
@@ -579,7 +520,7 @@
         };
 
         // --- ViewPane ---
-        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId, onNodeLinkClick, onOpenSearch, snapshotMode = false }) => {
+        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId, onOpenSearch }) => {
             const [listCollapsed, setListCollapsed] = useState(false);
             const [collapsedSections, setCollapsedSections] = useState(new Set());
             const toggleSection = (sectionId) => setCollapsedSections(prev => { const next = new Set(prev); next.has(sectionId) ? next.delete(sectionId) : next.add(sectionId); return next; });
@@ -655,12 +596,12 @@
                             {isRoot && onOpenSearch && (
                                 <button onClick={onOpenSearch} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="全文検索 (Ctrl+K)"><i className="ph ph-magnifying-glass text-lg"></i></button>
                             )}
-                            {!snapshotMode && <button onClick={onAddChild} className="px-2.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 hover:border-blue-300 transition-colors flex items-center gap-1" title="質問を追加">
+                            <button onClick={onAddChild} className="px-2.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 hover:border-blue-300 transition-colors flex items-center gap-1" title="質問を追加">
                                 <i className="ph-bold ph-plus text-xs"></i><span className="hidden sm:inline">追加</span>
-                            </button>}
-                            {!snapshotMode && <div className="w-px h-5 bg-gray-200 mx-1"></div>}
-                            {!snapshotMode && <button onClick={onEdit} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="編集"><i className="ph ph-pencil-simple text-lg"></i></button>}
-                            {!snapshotMode && !isRoot && <button onClick={onDelete} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除"><i className="ph ph-trash text-lg"></i></button>}
+                            </button>
+                            <div className="w-px h-5 bg-gray-200 mx-1"></div>
+                            <button onClick={onEdit} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="編集"><i className="ph ph-pencil-simple text-lg"></i></button>
+                            {!isRoot && <button onClick={onDelete} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除"><i className="ph ph-trash text-lg"></i></button>}
                             {!isRoot && <div className="w-px h-5 bg-gray-300 mx-1"></div>}
                             {!isRoot && <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors" title="閉じる"><i className="ph-bold ph-x text-lg"></i></button>}
                         </div>
@@ -761,7 +702,7 @@
                                                 <div className="bg-blue-50 px-6 py-3 border-b-2 border-blue-100 flex items-center justify-between">
                                                     <h3 className="text-xl font-bold text-blue-900 leading-snug flex-1">{section.title}</h3>
                                                     <div className="flex items-center gap-1 shrink-0 ml-2">
-                                                        {!snapshotMode && <button onClick={() => onAddChild(section.id)} title="このセクションから子ノードを追加" className="w-6 h-6 flex items-center justify-center rounded text-blue-300 hover:text-blue-600 hover:bg-blue-100 transition-colors"><i className="ph-bold ph-plus text-xs"></i></button>}
+                                                        <button onClick={() => onAddChild(section.id)} title="このセクションから子ノードを追加" className="w-6 h-6 flex items-center justify-center rounded text-blue-300 hover:text-blue-600 hover:bg-blue-100 transition-colors"><i className="ph-bold ph-plus text-xs"></i></button>
                                                         <button onClick={() => toggleSection(section.id)} title={isSectionCollapsed ? '展開' : '折りたたむ'} className="w-6 h-6 flex items-center justify-center rounded text-blue-300 hover:text-blue-600 hover:bg-blue-100 transition-colors"><i className={`ph-bold ph-caret-${isSectionCollapsed ? 'down' : 'up'} text-xs`}></i></button>
                                                     </div>
                                                 </div>
@@ -777,7 +718,7 @@
                                                         )}
                                                     </div>
                                                     <div className="flex items-center gap-1 shrink-0">
-                                                        {!snapshotMode && <button onClick={() => onAddChild(section.id)} title="このセクションから子ノードを追加" className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"><i className="ph-bold ph-plus text-xs"></i></button>}
+                                                        <button onClick={() => onAddChild(section.id)} title="このセクションから子ノードを追加" className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"><i className="ph-bold ph-plus text-xs"></i></button>
                                                         <button onClick={() => toggleSection(section.id)} title={isSectionCollapsed ? '展開' : '折りたたむ'} className="w-6 h-6 flex items-center justify-center rounded text-gray-300 hover:text-blue-500 hover:bg-blue-50 transition-colors"><i className={`ph-bold ph-caret-${isSectionCollapsed ? 'down' : 'up'} text-xs`}></i></button>
                                                     </div>
                                                 </div>
@@ -793,7 +734,7 @@
                                             {!isSectionCollapsed && (
                                                 <div className="px-6 py-4" onMouseUp={handleSectionMouseUp(section.id)}>
                                                     <div className="selection:bg-blue-200">
-                                                        <MarkdownViewer content={section.content} annotations={sectionAnnotations[section.id] || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} allNodes={allNodes} onNodeLinkClick={onNodeLinkClick} />
+                                                        <MarkdownViewer content={section.content} annotations={sectionAnnotations[section.id] || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} />
                                                     </div>
                                                 </div>
                                             )}
@@ -906,7 +847,7 @@
         };
 
         // --- テキスト注釈ビューペイン ---
-        const AnnotationViewPane = ({ annotation, breadcrumb, childNodes, subAnnotations, activeAnnotationId, selectedChildId, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, allNodes, onNodeLinkClick, snapshotMode = false }) => {
+        const AnnotationViewPane = ({ annotation, breadcrumb, childNodes, subAnnotations, activeAnnotationId, selectedChildId, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu }) => {
             if (!annotation) return null;
 
             const [quoteCollapsed, setQuoteCollapsed] = useState(true);
@@ -965,12 +906,12 @@
                             <h2 className="font-bold text-gray-800 leading-snug text-lg">{annotation.title}</h2>
                         </div>
                         <div className="flex items-center gap-1 shrink-0 ml-2">
-                            {!snapshotMode && <button onClick={onAddChild} className="px-2.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 hover:border-blue-300 transition-colors flex items-center gap-1" title="質問を追加">
+                            <button onClick={onAddChild} className="px-2.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 hover:border-blue-300 transition-colors flex items-center gap-1" title="質問を追加">
                                 <i className="ph-bold ph-plus text-xs"></i><span className="hidden sm:inline">追加</span>
-                            </button>}
-                            {!snapshotMode && <div className="w-px h-5 bg-gray-200 mx-1"></div>}
-                            {!snapshotMode && <button onClick={onEdit} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="編集"><i className="ph ph-pencil-simple text-lg"></i></button>}
-                            {!snapshotMode && <button onClick={onDelete} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除"><i className="ph ph-trash text-lg"></i></button>}
+                            </button>
+                            <div className="w-px h-5 bg-gray-200 mx-1"></div>
+                            <button onClick={onEdit} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="編集"><i className="ph ph-pencil-simple text-lg"></i></button>
+                            <button onClick={onDelete} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除"><i className="ph ph-trash text-lg"></i></button>
                             <div className="w-px h-5 bg-gray-300 mx-1"></div>
                             <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors" title="閉じる"><i className="ph-bold ph-x text-lg"></i></button>
                         </div>
@@ -1069,7 +1010,7 @@
                                             {!isSectionCollapsed && (
                                                 <div className="px-6 py-4" onMouseUp={handleMouseUp}>
                                                     <div className="selection:bg-blue-200">
-                                                        <MarkdownViewer content={section.content} annotations={subAnnotations || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} allNodes={allNodes} onNodeLinkClick={onNodeLinkClick} />
+                                                        <MarkdownViewer content={section.content} annotations={subAnnotations || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} />
                                                     </div>
                                                 </div>
                                             )}
@@ -1162,17 +1103,14 @@
 
         // --- メインアプリ ---
         const App = () => {
-            const snapshotData = window.__SNAPSHOT_DATA__ || null;
-            const snapshotMode = !!snapshotData;
-
-            const [appMode, setAppMode] = useState(snapshotMode ? 'workspace' : 'home');
+            const [appMode, setAppMode] = useState('home');
             const [projectList, setProjectList] = useState([]);
             const [currentProjectId, setCurrentProjectId] = useState(null);
-            const [currentProjectName, setCurrentProjectName] = useState(snapshotData ? snapshotData.name : '');
-            const [nodes, setNodes] = useState(() => snapshotData ? migrateNodes(snapshotData.nodes || {}) : {});
-            const [annotations, setAnnotations] = useState(() => snapshotData ? migrateAnnotations(snapshotData.annotations || []) : []); // テキスト選択注釈
-            const [panes, setPanes] = useState(snapshotMode ? [{ type: 'view', nodeId: 'root' }] : []);
-            const [treeExpandedIds, setTreeExpandedIds] = useState(() => snapshotData ? new Set(Object.keys(snapshotData.nodes || {}).filter(k => k !== 'root')) : new Set());
+            const [currentProjectName, setCurrentProjectName] = useState('');
+            const [nodes, setNodes] = useState({});
+            const [annotations, setAnnotations] = useState([]); // テキスト選択注釈
+            const [panes, setPanes] = useState([]);
+            const [treeExpandedIds, setTreeExpandedIds] = useState(() => new Set());
             const [selectionMenu, setSelectionMenu] = useState({ show: false, top: 0, left: 0, text: '', nodeId: null, paneIndex: 0 });
             const [tooltip, setTooltip] = useState({ show: false, text: '', top: 0, left: 0 });
             const [searchOpen, setSearchOpen] = useState(false);
@@ -1181,12 +1119,12 @@
             const searchInputRef = useRef(null);
             const scrollContainerRef = useRef(null);
 
-            // 初期化（スナップショットモードではlocalStorageを読まない）
-            useEffect(() => { if (!snapshotMode) setProjectList(Storage.getProjectList()); }, []);
+            // 初期化
+            useEffect(() => { setProjectList(Storage.getProjectList()); }, []);
 
-            // 自動保存（スナップショットモードでは保存しない）
+            // 自動保存
             useEffect(() => {
-                if (snapshotMode || !currentProjectId || !nodes['root']) return;
+                if (!currentProjectId || !nodes['root']) return;
                 Storage.saveProjectData(currentProjectId, { nodes, annotations });
                 setProjectList(prev => {
                     const updated = prev.map(p => p.id === currentProjectId ? {
@@ -1502,9 +1440,6 @@
                 setPanes([{ type: 'view', nodeId: 'root' }, ...path.map(id => ({ type: 'view', nodeId: id })), { type: 'annotation', annotationId }]);
             };
 
-            // ノード間リンク [[...]] クリック
-            const handleNodeLinkClick = (nodeId) => { handleTreeSelectNode(nodeId); };
-
             // --- パンくず生成 ---
             const buildBreadcrumbPath = (paneIndex) => {
                 const path = [];
@@ -1539,26 +1474,6 @@
             };
             const exportAllProjects = () => doExport(projectList.map(p => p.id));
             const exportSingleProject = (id) => doExport([id]);
-
-            const generateSnapshot = (id) => {
-                const meta = projectList.find(p => p.id === id);
-                const data = Storage.getProjectData(id);
-                if (!meta || !data) return;
-                const payload = JSON.stringify({ name: meta.name, nodes: data.nodes || {}, annotations: data.annotations || [] });
-                // NOTE: avoid literal close-script tag in string; split to prevent early tag close
-                const injectedScript = '<script id="__snapshot_inject__">window.__SNAPSHOT_DATA__ = ' + payload + ';<' + '/script>';
-                // Use the HTML captured before React rendered (stored in window.__ORIGINAL_HTML__).
-                // This avoids the bug where document.documentElement.outerHTML + regex would
-                // accidentally strip the <script type="text/babel"> tag along with the root div content.
-                const baseHtml = window.__ORIGINAL_HTML__ || document.documentElement.outerHTML;
-                const modified = baseHtml.replace('</head>', injectedScript + '\n</head>');
-                const blob = new Blob([modified], { type: 'text/html;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                const safeName = meta.name.replace(/[^\w\u3000-\u9fff\uff01-\uffee]/g, '_').substring(0, 40);
-                a.href = url; a.download = `snapshot_${safeName || 'project'}.html`;
-                document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-            };
 
             const importProjects = (data) => {
                 if (!data || (data.type !== 'annotator-qa-export' && data.type !== 'annotator-qa-export') || !Array.isArray(data.projects)) {
@@ -1597,17 +1512,12 @@
                             )}
                         </div>
                         <div className="ml-auto flex items-center gap-4">
-                            {snapshotMode && (
-                                <span className="text-xs font-bold px-3 py-1 rounded-full bg-green-700 text-green-100 flex items-center gap-1.5">
-                                    <i className="ph-bold ph-camera text-sm"></i> スナップショット（閲覧専用）
-                                </span>
-                            )}
-                            {!snapshotMode && appMode !== 'home' && <button onClick={goHome} className="text-slate-400 hover:text-white text-sm flex items-center gap-1.5 transition-colors font-medium"><i className="ph-bold ph-house"></i> ホーム</button>}
+                            {appMode !== 'home' && <button onClick={goHome} className="text-slate-400 hover:text-white text-sm flex items-center gap-1.5 transition-colors font-medium"><i className="ph-bold ph-house"></i> ホーム</button>}
                         </div>
                     </header>
 
                     {appMode === 'home' && (
-                        <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onDelete={deleteProject} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImport={importProjects} onSnapshot={generateSnapshot} />
+                        <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onDelete={deleteProject} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImport={importProjects} />
                     )}
                     {appMode === 'setup' && (
                         <SetupScreen initialName={currentProjectName} isNew={!currentProjectId} onSave={handleSetupSave}
@@ -1746,9 +1656,7 @@
                                                 onTreeSelectAnnotation={isRootPane ? handleTreeSelectAnnotation : null}
                                                 treeActiveNodeIds={treeActiveNodeIds}
                                                 treeActiveAnnotationId={treeActiveAnnotationId}
-                                                onNodeLinkClick={handleNodeLinkClick}
                                                 onOpenSearch={isRootPane ? openSearch : null}
-                                                snapshotMode={snapshotMode}
                                             />
                                         );
                                     }
@@ -1802,9 +1710,6 @@
                                                 onAnnotationClick={(annotationId) => openAnnotation(index, annotationId)}
                                                 onMarkHover={(h, t, r) => { if (h && r) setTooltip({ show: true, text: t, top: r.top - 8, left: r.left + r.width / 2 }); else setTooltip({ show: false }); }}
                                                 onHideSelectionMenu={hideSelectionMenu}
-                                                allNodes={nodes}
-                                                onNodeLinkClick={handleNodeLinkClick}
-                                                snapshotMode={snapshotMode}
                                             />
                                         );
                                     }
