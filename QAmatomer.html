@@ -360,7 +360,7 @@
 
 
         // --- ホーム画面 ---
-        const HomeScreen = ({ projects, onOpen, onCreateNew, onDelete, onExportSingle, onExportAll, onImport, onSnapshot }) => {
+        const HomeScreen = ({ projects, onOpen, onCreateNew, onDelete, onExportSingle, onExportAll, onImport }) => {
             const fileInputRef = useRef(null);
             const handleFileChange = (e) => {
                 const file = e.target.files[0]; if (!file) return;
@@ -416,7 +416,6 @@
                                             </div>
                                             <div className="flex items-center gap-1 ml-4 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button onClick={(e) => { e.stopPropagation(); onExportSingle(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="エクスポート（JSON）"><i className="ph ph-download-simple text-lg"></i></button>
-                                                {onSnapshot && <button onClick={(e) => { e.stopPropagation(); onSnapshot(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-green-600 hover:bg-green-100 transition-colors" title="HTMLスナップショット出力"><i className="ph ph-camera text-lg"></i></button>}
                                                 <button onClick={(e) => { e.stopPropagation(); if(confirm('\u300c'+project.name+'\u300d\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f\u3053\u306e\u64cd\u4f5c\u306f\u5143\u306b\u623b\u305b\u307e\u305b\u3093\u3002')) onDelete(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除"><i className="ph ph-trash text-lg"></i></button>
                                             </div>
                                         </div>
@@ -1538,45 +1537,6 @@
             const exportAllProjects = () => doExport(projectList.map(p => p.id));
             const exportSingleProject = (id) => doExport([id]);
 
-            // --- HTMLスナップショット生成（アプリ本体をそのまま埋め込み、localStorageのみ差し替え） ---
-            const generateSnapshot = async (projectId) => {
-                const meta = projectList.find(p => p.id === projectId);
-                const data = Storage.getProjectData(projectId);
-                if (!data) { alert('データが見つかりませんでした。'); return; }
-                const projectName = meta?.name || '名前なし';
-
-                const snapId = 'snapshot';
-                const plEsc = JSON.stringify([{ id: snapId, name: projectName }]).replace(/<\/script/gi, '<\\/script');
-                const pdEsc = JSON.stringify(data).replace(/<\/script/gi, '<\\/script');
-                const sc = '</' + 'script>';
-
-                const overrideScript = '<script>(function(){'
-                    + 'var PL=' + plEsc + ';'
-                    + 'var PD=' + pdEsc + ';'
-                    + 'var _g=Storage.prototype.getItem;'
-                    + 'Storage.prototype.getItem=function(k){'
-                    + 'if(k===\'annotator-qa-project-list\') return PL;'
-                    + 'if(k===\'annotator-qa-project-' + snapId + '\') return PD;'
-                    + 'return _g.call(this,k);};'
-                    + 'Storage.prototype.setItem=function(){};'
-                    + 'Storage.prototype.removeItem=function(){};'
-                    + '})();' + sc;
-
-                let html = document.documentElement.outerHTML;
-                html = html.replace('<head>', '<head>' + overrideScript);
-
-                const filename = projectName.replace(/[\s\/\\:*?"<>|]/g, '_').substring(0, 60) + '-snapshot.html';
-                const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            };
-
             const importProjects = (data) => {
                 if (!data || (data.type !== 'annotator-qa-export' && data.type !== 'annotator-qa-export') || !Array.isArray(data.projects)) {
                     alert('無効なファイル形式です。このツールからエクスポートしたファイルを選択してください。'); return;
@@ -1619,7 +1579,7 @@
                     </header>
 
                     {appMode === 'home' && (
-                        <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onDelete={deleteProject} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImport={importProjects} onSnapshot={generateSnapshot} />
+                        <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onDelete={deleteProject} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImport={importProjects} />
                     )}
                     {appMode === 'setup' && (
                         <SetupScreen initialName={currentProjectName} isNew={!currentProjectId} onSave={handleSetupSave}
