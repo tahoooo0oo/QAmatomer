@@ -1583,6 +1583,35 @@
                     return tmp.innerHTML;
                 };
 
+                // 全ノードのコンテンツを事前レンダリング
+                const preNodes = {};
+                for (const [id, node] of Object.entries(snapNodes)) {
+                    preNodes[id] = {
+                        id,
+                        question: renderInline(node.question),
+                        sections: (node.sections || []).map(s => ({
+                            title: renderInline(s.title),
+                            content: renderMdMath(s.content)
+                        })),
+                        children: node.children || []
+                    };
+                }
+
+                // 全アノテーションのコンテンツを事前レンダリング
+                const preAnnotations = {};
+                for (const a of snapAnnotations) {
+                    preAnnotations[a.id] = {
+                        id: a.id,
+                        title: renderInline(a.title),
+                        quote: a.quote || '',
+                        nodeId: a.nodeId,
+                        sections: (a.sections || []).map(s => ({
+                            title: renderInline(s.title),
+                            content: renderMdMath(s.content)
+                        }))
+                    };
+                }
+
                 let katexCss = '';
                 try {
                     const resp = await fetch('https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css');
@@ -1592,121 +1621,172 @@
                     }
                 } catch(e) {}
 
-                const renderSnapshotNode = (nodeId, depth) => {
-                    const node = snapNodes[nodeId];
-                    if (!node) return '';
-                    if (nodeId === 'root') {
-                        let html = '';
-                        if (node.sections) {
-                            for (const s of node.sections) {
-                                if (s.title) html += `<h2 class="section-title-bar">${renderInline(s.title)}</h2>`;
-                                if (s.content) html += `<div class="markdown-body">${renderMdMath(s.content)}</div>`;
-                            }
-                        }
-                        for (const childId of (node.children || [])) html += renderSnapshotNode(childId, 0);
-                        return html;
-                    }
-                    const hTag = depth === 0 ? 'h2' : depth === 1 ? 'h3' : depth === 2 ? 'h4' : 'h5';
-                    let html = `<div class="qa-node depth-${Math.min(depth, 4)}">`;
-                    html += `<${hTag} class="qa-question"><span class="qa-q-icon">Q</span>${renderInline(node.question)}</${hTag}>`;
-                    if (node.sections && node.sections.some(s => s.content || s.title)) {
-                        html += '<div class="qa-answer">';
-                        const titledSecs = node.sections.filter(s => s.title);
-                        if (node.sections.length > 1 && titledSecs.length > 0) {
-                            html += '<div class="toc"><div class="toc-label">目次</div><ol>';
-                            node.sections.forEach(s => { if (s.title) html += `<li>${renderInline(s.title)}</li>`; });
-                            html += '</ol></div>';
-                        }
-                        for (const s of node.sections) {
-                            if (!s.content && !s.title) continue;
-                            html += '<div class="section-block">';
-                            if (s.title) html += `<div class="section-title-bar">${renderInline(s.title)}</div>`;
-                            if (s.content) html += `<div class="markdown-body">${renderMdMath(s.content)}</div>`;
-                            html += '</div>';
-                        }
-                        html += '</div>';
-                    }
-                    const nodeAnnotations = snapAnnotations.filter(a => a.nodeId === nodeId);
-                    if (nodeAnnotations.length > 0) {
-                        html += '<div class="annotations-block">';
-                        for (const a of nodeAnnotations) {
-                            html += '<div class="annotation-block">';
-                            html += `<div class="annotation-title"><span class="annotation-icon">📌</span>${renderInline(a.title)}</div>`;
-                            if (a.quote) html += `<blockquote class="annotation-quote">${esc(a.quote)}</blockquote>`;
-                            if (a.sections) {
-                                for (const s of a.sections) {
-                                    if (s.title) html += `<div class="section-title-bar">${renderInline(s.title)}</div>`;
-                                    if (s.content) html += `<div class="markdown-body">${renderMdMath(s.content)}</div>`;
-                                }
-                            }
-                            html += '</div>';
-                        }
-                        html += '</div>';
-                    }
-                    for (const childId of (node.children || [])) html += renderSnapshotNode(childId, depth + 1);
-                    html += '</div>';
-                    return html;
-                };
+                // </script> がJSONに含まれていてもスクリプトタグを壊さないようエスケープ
+                const dataJson = JSON.stringify({ name: projectName, nodes: preNodes, annotations: preAnnotations })
+                    .replace(/<\/script/gi, '<\\/script');
 
-                const bodyContent = renderSnapshotNode('root', 0);
-                const now = new Date().toLocaleString('ja-JP');
-                const styleClose = '</' + 'style>';
+                const sc = '</' + 'script>';
+
+                // 横ペインUIのロジック（バッククォートや${を含まない形で記述）
+                const jsCode = `(function(){
+var S=SNAP,C=document.getElementById('pane-container');
+document.getElementById('proj-title').textContent=S.name;
+var state=[{t:'node',id:'root'}];
+function render(){
+  C.innerHTML='';
+  state.forEach(function(item,idx){
+    var d=document.createElement('div');
+    d.innerHTML=item.t==='node'?buildNode(item.id,idx):buildAnnot(item.id,idx);
+    if(d.firstChild) C.appendChild(d.firstChild);
+  });
+  bindEvents();
+}
+function buildNode(nid,pi){
+  var n=S.nodes[nid]; if(!n) return '<div></div>';
+  var isRoot=(nid==='root'),nx=state[pi+1];
+  var annots=Object.values(S.annotations).filter(function(a){return a.nodeId===nid;});
+  var listH='',cntH='';
+  if(n.children.length||annots.length){
+    var ci=n.children.map(function(cid){
+      var c=S.nodes[cid]; if(!c) return '';
+      var act=nx&&nx.t==='node'&&nx.id===cid;
+      return '<div class="ci'+(act?' active':'')+'" data-pi="'+pi+'" data-cid="'+cid+'"><span class="arr">&#9658;</span><span>'+c.question+'</span></div>';
+    }).join('');
+    var ai=annots.map(function(a){
+      var act=nx&&nx.t==='annot'&&nx.id===a.id;
+      return '<div class="ai'+(act?' active':'')+'" data-pi="'+pi+'" data-aid="'+a.id+'"><span class="pin">&#128204;</span><span>'+(a.title||'注釈')+'</span></div>';
+    }).join('');
+    var tot=n.children.length+annots.length;
+    listH='<div class="plist"><div class="plabel">'+(isRoot?'質問一覧':'派生する質問・注釈')+' ('+tot+')</div><div class="pitems">'+ci+ai+'</div></div>';
+  }
+  if(!isRoot&&n.sections&&n.sections.some(function(s){return s.content||s.title;})){
+    var ts=n.sections.filter(function(s){return s.title;});
+    if(n.sections.length>1&&ts.length) cntH+='<div class="toc"><div class="toch">目次</div><ol>'+ts.map(function(s){return '<li>'+s.title+'</li>';}).join('')+'</ol></div>';
+    n.sections.forEach(function(s){
+      if(!s.content&&!s.title) return;
+      cntH+='<div class="sec">'+(s.title?'<div class="sth">'+s.title+'</div>':'')+(s.content?'<div class="md">'+s.content+'</div>':'')+'</div>';
+    });
+  }
+  var badge=isRoot?'':"<span class='qb'>Q</span>";
+  var close=isRoot?'':"<button class='xbtn' data-pi='"+pi+"'>&#10005;</button>";
+  return '<div class="pane'+(isRoot?' root':'')+'"><div class="ph"><div class="pt">'+badge+n.question+'</div>'+close+'</div>'+listH+(cntH?'<div class="pc">'+cntH+'</div>':'')+'</div>';
+}
+function buildAnnot(aid,pi){
+  var a=S.annotations[aid]; if(!a) return '<div></div>';
+  var cntH='';
+  if(a.quote) cntH+='<div class="qbox">'+a.quote.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div>';
+  if(a.sections) a.sections.forEach(function(s){
+    if(!s.content&&!s.title) return;
+    cntH+='<div class="sec">'+(s.title?'<div class="sth">'+s.title+'</div>':'')+(s.content?'<div class="md">'+s.content+'</div>':'')+'</div>';
+  });
+  return '<div class="pane annot"><div class="ph"><div class="pt"><span class="pb">&#128204;</span>'+(a.title||'注釈')+'</div><button class="xbtn" data-pi="'+pi+'">&#10005;</button></div>'+(cntH?'<div class="pc">'+cntH+'</div>':'')+'</div>';
+}
+function bindEvents(){
+  C.querySelectorAll('.ci').forEach(function(el){
+    el.addEventListener('click',function(){
+      var pi=parseInt(el.dataset.pi),id=el.dataset.cid;
+      state=state[pi+1]&&state[pi+1].t==='node'&&state[pi+1].id===id
+        ?state.slice(0,pi+1)
+        :state.slice(0,pi+1).concat([{t:'node',id:id}]);
+      render();
+      setTimeout(function(){ var ps=C.querySelectorAll('.pane'); if(ps[pi+1]) ps[pi+1].scrollIntoView({behavior:'smooth',inline:'nearest'}); },50);
+    });
+  });
+  C.querySelectorAll('.ai').forEach(function(el){
+    el.addEventListener('click',function(){
+      var pi=parseInt(el.dataset.pi),id=el.dataset.aid;
+      state=state[pi+1]&&state[pi+1].t==='annot'&&state[pi+1].id===id
+        ?state.slice(0,pi+1)
+        :state.slice(0,pi+1).concat([{t:'annot',id:id}]);
+      render();
+      setTimeout(function(){ var ps=C.querySelectorAll('.pane'); if(ps[pi+1]) ps[pi+1].scrollIntoView({behavior:'smooth',inline:'nearest'}); },50);
+    });
+  });
+  C.querySelectorAll('.xbtn').forEach(function(el){
+    el.addEventListener('click',function(){
+      state=state.slice(0,parseInt(el.dataset.pi));
+      render();
+    });
+  });
+}
+render();
+})();`;
+
+                const katexCssSafe = katexCss.replace(/`/g, '\\`');
                 const snapshotHtml = `<!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>${esc(projectName)}</title>
 <style>
-${katexCss}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;max-width:900px;margin:0 auto;padding:2em 1.5em;color:#1e293b;background:#f8fafc;line-height:1.7}
-.page-header{background:#0f172a;color:white;padding:1.5em 2em;border-radius:12px;margin-bottom:2em}
-.page-header h1{margin:0;font-size:1.6rem;font-weight:800}
-.page-header .meta{margin:.5em 0 0;font-size:.8rem;color:#94a3b8}
-.qa-node{margin:1.5em 0}
-.qa-node.depth-0{background:white;border:1px solid #e2e8f0;border-radius:12px;padding:1.2em 1.5em;box-shadow:0 1px 6px rgba(0,0,0,.05)}
-.qa-node.depth-1{border-left:3px solid #3b82f6;padding-left:1em;margin-left:1em}
-.qa-node.depth-2{border-left:3px solid #8b5cf6;padding-left:1em;margin-left:2em}
-.qa-node.depth-3,.qa-node.depth-4{border-left:2px solid #cbd5e1;padding-left:1em;margin-left:3em}
-.qa-question{margin:0 0 .75em;font-weight:700;color:#0f172a;display:flex;align-items:baseline;gap:.5em}
-h2.qa-question{font-size:1.2rem}h3.qa-question{font-size:1.05rem}h4.qa-question,h5.qa-question{font-size:.95rem}
-.qa-q-icon{background:#3b82f6;color:white;font-size:.7rem;font-weight:800;padding:.1em .45em;border-radius:4px;flex-shrink:0}
-.depth-2 .qa-q-icon{background:#8b5cf6}.depth-3 .qa-q-icon,.depth-4 .qa-q-icon{background:#64748b}
-.section-block{margin-bottom:.75em}
-.section-title-bar{font-size:.8rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4em;padding-bottom:.3em;border-bottom:1px solid #e2e8f0}
-.markdown-body{color:#334155;font-size:.93rem;line-height:1.8}
-.markdown-body h1{font-size:1.4rem;font-weight:700;margin:1.5em 0 .75em;color:#0f172a}
-.markdown-body h2{font-size:1.2rem;font-weight:700;margin:1.5em 0 .75em;color:#1e293b;border-bottom:1px solid #e2e8f0;padding-bottom:.3em}
-.markdown-body h3{font-size:1.05rem;font-weight:600;margin:1.25em 0 .5em;color:#334155}
-.markdown-body p{margin:0 0 1em}.markdown-body p:last-child{margin-bottom:0}
-.markdown-body a{color:#2563eb;text-decoration:underline}
-.markdown-body ul{list-style:disc;padding-left:1.5em;margin-bottom:1em}
-.markdown-body ol{list-style:decimal;padding-left:1.5em;margin-bottom:1em}
-.markdown-body li{margin-bottom:.3em}
-.markdown-body blockquote{border-left:4px solid #cbd5e1;color:#64748b;font-style:italic;margin-bottom:1em;background:#f8fafc;padding:.5em 1em;border-radius:0 .5rem .5rem 0}
-.markdown-body code{background:#f1f5f9;color:#ef4444;padding:.2em .4em;border-radius:.25rem;font-size:.875em;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
-.markdown-body pre{background:#1e293b;color:#f8fafc;padding:1em;border-radius:.5rem;overflow-x:auto;margin-bottom:1em}
-.markdown-body pre code{background:transparent;color:inherit;padding:0}
-.markdown-body table{width:100%;border-collapse:collapse;margin-bottom:1em}
-.markdown-body th,.markdown-body td{border:1px solid #e2e8f0;padding:.5em;text-align:left}
-.markdown-body th{background:#f8fafc;font-weight:600}
-.markdown-body hr{border:none;border-top:1px solid #e2e8f0;margin:1.5em 0}
-.katex-display{margin:1em 0;overflow-x:auto;overflow-y:hidden;padding-bottom:.2em}
-.toc{background:#f1f5f9;border-radius:8px;padding:.8em 1em;margin-bottom:1em;font-size:.85rem}
-.toc-label{font-weight:700;font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:.5em}
-.toc ol{margin:0;padding-left:1.5em}.toc li{margin-bottom:.2em;color:#475569}
-.annotations-block{margin-top:.5em}
-.annotation-block{background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.75em 1em;margin-bottom:.5em}
-.annotation-title{font-weight:700;font-size:.9rem;color:#92400e;margin-bottom:.4em;display:flex;align-items:baseline;gap:.4em}
-.annotation-quote{margin:0 0 .5em;font-size:.8rem;color:#78350f;font-style:italic;border-left:3px solid #fbbf24;padding:.3em .7em;background:white;border-radius:0 4px 4px 0}
-${styleClose}
+${katexCssSafe}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+body{display:flex;flex-direction:column;background:#e2e8f0}
+#hdr{background:#0f172a;color:white;padding:.7em 1.2em;display:flex;align-items:center;gap:.8em;flex-shrink:0;min-height:48px}
+#hdr h1{font-size:1rem;font-weight:700;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#hdr .badge{font-size:.68rem;background:#1e3a5f;padding:.2em .6em;border-radius:4px;color:#7dd3fc;flex-shrink:0}
+#pane-container{flex:1;display:flex;overflow-x:auto;overflow-y:hidden;min-height:0}
+#pane-container::-webkit-scrollbar{height:8px}
+#pane-container::-webkit-scrollbar-track{background:#cbd5e1}
+#pane-container::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:4px}
+.pane{flex-shrink:0;width:clamp(300px,45vw,500px);display:flex;flex-direction:column;border-right:1px solid #cbd5e1;background:white;height:100%;overflow:hidden}
+.pane.root{background:#f8fafc}
+.pane.annot{background:#fffbeb}
+.ph{padding:.85em 1em;border-bottom:1px solid #e2e8f0;display:flex;align-items:flex-start;gap:.5em;flex-shrink:0;background:inherit;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.pt{font-weight:700;font-size:.93rem;color:#0f172a;line-height:1.45;flex:1;min-width:0;word-break:break-word}
+.qb{display:inline-block;background:#3b82f6;color:white;font-size:.62rem;font-weight:800;padding:.12em .4em;border-radius:3px;margin-right:.35em;vertical-align:.1em;flex-shrink:0}
+.pb{display:inline-block;margin-right:.3em}
+.xbtn{flex-shrink:0;width:26px;height:26px;border:none;background:transparent;cursor:pointer;color:#94a3b8;font-size:.85rem;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s}
+.xbtn:hover{background:#f1f5f9;color:#475569}
+.plist{overflow-y:auto;border-bottom:1px solid #e2e8f0;flex-shrink:0;max-height:40%}
+.root .plist{flex:1;max-height:none;border-bottom:none}
+.plabel{padding:.35em 1em;font-size:.65rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.07em;background:#f1f5f9;border-bottom:1px solid #e8edf2;position:sticky;top:0}
+.pitems{padding:.35em .5em;display:flex;flex-direction:column;gap:.2em}
+.ci,.ai{padding:.42em .7em;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:.45em;font-size:.86rem;border:1px solid #e2e8f0;transition:all .12s;user-select:none}
+.ci{color:#334155;background:white}.ci:hover{border-color:#93c5fd;background:#eff6ff;color:#1e40af}
+.ci.active{border-color:#3b82f6;background:#dbeafe;color:#1e40af;font-weight:600}
+.ai{color:#92400e;background:#fef9e7;border-color:#fde68a}.ai:hover{background:#fef3c7;border-color:#f59e0b}
+.ai.active{background:#fde68a;border-color:#f59e0b;font-weight:600}
+.arr{color:#94a3b8;font-size:.72rem;flex-shrink:0}
+.pc{flex:1;overflow-y:auto;padding:.9em 1em}.pc::-webkit-scrollbar{width:5px}
+.pc::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
+.sec{margin-bottom:.7em}
+.sth{font-size:.7rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.06em;padding-bottom:.25em;border-bottom:1px solid #e2e8f0;margin-bottom:.35em}
+.toc{background:#f1f5f9;border-radius:6px;padding:.5em .8em;margin-bottom:.7em;font-size:.8rem}
+.toch{font-weight:700;font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:#94a3b8;margin-bottom:.3em}
+.toc ol{margin:0;padding-left:1.2em}.toc li{margin-bottom:.12em;color:#475569}
+.qbox{background:#fef3c7;border-left:3px solid #f59e0b;padding:.4em .8em;border-radius:0 5px 5px 0;font-size:.82rem;color:#78350f;font-style:italic;margin-bottom:.6em}
+.md{color:#334155;font-size:.88rem;line-height:1.8}
+.md h1{font-size:1.2rem;font-weight:700;margin:1.2em 0 .5em;color:#0f172a}
+.md h2{font-size:1.05rem;font-weight:700;margin:1.1em 0 .45em;color:#1e293b;border-bottom:1px solid #e2e8f0;padding-bottom:.2em}
+.md h3{font-size:.95rem;font-weight:600;margin:1em 0 .35em;color:#334155}
+.md p{margin:0 0 .8em}.md p:last-child{margin:0}
+.md a{color:#2563eb;text-decoration:underline}
+.md ul{list-style:disc;padding-left:1.4em;margin-bottom:.8em}
+.md ol{list-style:decimal;padding-left:1.4em;margin-bottom:.8em}
+.md li{margin-bottom:.2em}
+.md blockquote{border-left:4px solid #cbd5e1;color:#64748b;font-style:italic;margin-bottom:.8em;background:#f8fafc;padding:.4em .8em;border-radius:0 .4rem .4rem 0}
+.md code{background:#f1f5f9;color:#ef4444;padding:.15em .35em;border-radius:.2rem;font-size:.83em;font-family:ui-monospace,Menlo,monospace}
+.md pre{background:#1e293b;color:#f8fafc;padding:.8em;border-radius:.4rem;overflow-x:auto;margin-bottom:.8em}
+.md pre code{background:transparent;color:inherit;padding:0}
+.md table{width:100%;border-collapse:collapse;margin-bottom:.8em;font-size:.85rem}
+.md th,.md td{border:1px solid #e2e8f0;padding:.35em .5em;text-align:left}
+.md th{background:#f8fafc;font-weight:600}
+.md hr{border:none;border-top:1px solid #e2e8f0;margin:1em 0}
+.katex-display{margin:.8em 0;overflow-x:auto;padding-bottom:.15em}
+</style>
+<script>const SNAP=${dataJson};${sc}
 </head>
 <body>
-<div class="page-header">
-  <h1>${esc(projectName)}</h1>
-  <p class="meta">スナップショット | ${esc(now)}</p>
+<div id="hdr">
+  <h1 id="proj-title"></h1>
+  <span class="badge">スナップショット</span>
 </div>
-${bodyContent}
+<div id="pane-container"></div>
+<script>
+${jsCode}
+${sc}
 </body>
 </html>`;
 
