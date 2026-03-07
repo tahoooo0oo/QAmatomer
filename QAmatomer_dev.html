@@ -441,7 +441,7 @@
 
 
         // --- ホーム画面 ---
-        const HomeScreen = ({ projects, customFolders, onOpen, onCreateNew, onCreateInFolder, onDelete, onMoveToFolder, onMoveProjectOrder, onExportSingle, onExportAll, onImportFiles, onSyncFromFolder, onCreateFolder, onDeleteFolder }) => {
+        const HomeScreen = ({ projects, customFolders, onOpen, onCreateNew, onCreateInFolder, onDelete, onMoveToFolder, onMoveProjectOrder, onExportSingle, onExportAll, onImportFiles, onImportFilesToFolder, onSyncFromFolder, onCreateFolder, onDeleteFolder, onRenameFolder }) => {
             const [selectedFolder, setSelectedFolder] = useState('ALL');
             const [viewMode, setViewMode] = useState('TREE');
             const [sortMode, setSortMode] = useState(() => Storage.getHomeListPrefs().sortMode || 'CREATED_ASC');
@@ -449,6 +449,7 @@
             const multiFileInputRef = useRef(null);
             const folderFileInputRef = useRef(null);
             const syncFolderInputRef = useRef(null);
+            const folderImportInputRef = useRef(null);
             const normalizeFolder = (category) => (category || '未分類');
             const parseJsonFile = async (file) => {
                 try {
@@ -479,6 +480,14 @@
                 const parsedList = (await Promise.all(files.map(parseJsonFile))).filter(Boolean);
                 if (parsedList.length === 0) { alert('有効なJSONファイルを読み込めませんでした。'); e.target.value = ''; return; }
                 onSyncFromFolder(selectedFolder, parsedList); e.target.value = '';
+            };
+            const handleFolderImportChange = async (e) => {
+                const files = Array.from(e.target.files || []);
+                if (selectedFolder === 'ALL') { alert('インポート先フォルダを選択してください。'); e.target.value = ''; return; }
+                if (files.length === 0) return;
+                const parsedList = (await Promise.all(files.map(parseJsonFile))).filter(Boolean);
+                if (parsedList.length === 0) { alert('有効なJSONファイルを読み込めませんでした。'); e.target.value = ''; return; }
+                onImportFilesToFolder(selectedFolder, parsedList); e.target.value = '';
             };
             const folderStats = projects.reduce((acc, p) => {
                 const folder = normalizeFolder(p.category);
@@ -559,6 +568,7 @@
                                 <input ref={multiFileInputRef} type="file" accept=".json" multiple onChange={handleMultiFileChange} className="hidden" />
                                 <input ref={folderFileInputRef} type="file" accept=".json" multiple webkitdirectory="" directory="" onChange={handleFolderFileChange} className="hidden" />
                                 <input ref={syncFolderInputRef} type="file" accept=".json" webkitdirectory="" directory="" onChange={handleSyncFolderChange} className="hidden" />
+                                <input ref={folderImportInputRef} type="file" accept=".json" multiple onChange={handleFolderImportChange} className="hidden" />
                                 {projects.length > 0 && (
                                     <button onClick={onExportAll} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
                                         <i className="ph-bold ph-download-simple"></i> 全てエクスポート
@@ -640,13 +650,36 @@
                                 <div className="p-5">
                                     <div className="flex items-center justify-between gap-3 mb-4">
                                         <div>
-                                            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2"><i className="ph ph-folder-open text-blue-500"></i>{selectedFolder === 'ALL' ? 'すべてのページ' : selectedFolder}</h3>
+                                            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                                <i className="ph ph-folder-open text-blue-500"></i>
+                                                <span onContextMenu={(e) => {
+                                                    if (selectedFolder === 'ALL') return;
+                                                    e.preventDefault();
+                                                    const next = prompt('フォルダ名を変更', selectedFolder);
+                                                    if (!next || next.trim() === selectedFolder) return;
+                                                    onRenameFolder(selectedFolder, next.trim());
+                                                    setSelectedFolder(next.trim());
+                                                }} className={selectedFolder === 'ALL' ? '' : 'cursor-text'} title={selectedFolder === 'ALL' ? '' : '右クリックでフォルダ名変更'}>{selectedFolder === 'ALL' ? 'すべてのページ' : selectedFolder}</span>
+                                                {selectedFolder !== 'ALL' && (
+                                                    <button onClick={() => {
+                                                        const next = prompt('フォルダ名を変更', selectedFolder);
+                                                        if (!next || next.trim() === selectedFolder) return;
+                                                        onRenameFolder(selectedFolder, next.trim());
+                                                        setSelectedFolder(next.trim());
+                                                    }} className="w-6 h-6 rounded-md border border-slate-300 text-slate-500 hover:text-blue-600 hover:border-blue-300 hover:bg-white flex items-center justify-center" title="フォルダ名を変更">
+                                                        <i className="ph-bold ph-pencil-simple text-xs"></i>
+                                                    </button>
+                                                )}
+                                            </h3>
                                             <p className="text-xs text-gray-500 mt-1">{visibleProjects.length} 件</p>
                                         </div>
                                         {selectedFolder !== 'ALL' && (
                                             <div className="flex items-center gap-2 flex-wrap justify-end">
                                                 <button onClick={() => syncFolderInputRef.current?.click()} className="px-3 py-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 font-medium text-sm flex items-center gap-2 transition-colors" title="選択中フォルダのページ一覧を、選択したフォルダ内JSONに合わせて更新します">
-                                                    <i className="ph-bold ph-arrows-clockwise"></i> 選択フォルダ同期
+                                                    <i className="ph-bold ph-arrows-clockwise"></i> フォルダ同期
+                                                </button>
+                                                <button onClick={() => folderImportInputRef.current?.click()} className="px-3 py-2 text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 font-medium text-sm flex items-center gap-2 transition-colors" title="選択中フォルダにJSONをインポートします">
+                                                    <i className="ph-bold ph-upload-simple"></i> このフォルダにインポート
                                                 </button>
                                                 <button onClick={() => {
                                                     if (!confirm('「' + selectedFolder + '」フォルダを削除しますか？\nフォルダ内ページは「未分類」に移動します。')) return;
@@ -1617,6 +1650,24 @@
                 });
                 if (currentProjectCategory === folderName) setCurrentProjectCategory('未分類');
             };
+            const renameFolder = (fromNameInput, toNameInput) => {
+                const fromName = (fromNameInput || '').trim();
+                const toName = (toNameInput || '').trim();
+                if (!fromName || !toName || fromName === toName) return;
+                setProjectList(prev => {
+                    const next = prev.map(p => (p.category || '未分類') === fromName ? { ...p, category: toName, updatedAt: Date.now() } : p);
+                    Storage.saveProjectList(next);
+                    return next;
+                });
+                setCustomFolders(prev => {
+                    const base = prev.filter(f => f !== fromName);
+                    const next = base.includes(toName) ? base : [...base, toName];
+                    next.sort((a, b) => a.localeCompare(b, 'ja'));
+                    Storage.saveCustomFolders(next);
+                    return next;
+                });
+                if (currentProjectCategory === fromName) setCurrentProjectCategory(toName);
+            };
             const goHome = () => { setAppMode('home'); setCurrentProjectId(null); setCurrentProjectName(''); setNodes({}); setAnnotations([]); setPanes([]); setTreeExpandedIds(new Set()); setSelectionMenu({ show: false }); setTooltip({ show: false }); };
 
             // --- 全文検索 ---
@@ -2095,7 +2146,7 @@
             };
 
             const importProjectPayloads = (payloads, opts = {}) => {
-                const { replaceAll = false } = opts;
+                const { replaceAll = false, forceCategory = null } = opts;
                 const targets = [];
                 let invalidCount = 0;
                 payloads.forEach(payload => {
@@ -2121,7 +2172,7 @@
                     newList.unshift({
                         id,
                         name: proj.name || '名前なし',
-                        category: proj.category || '未分類',
+                        category: forceCategory || proj.category || '未分類',
                         createdAt: proj.createdAt || now,
                         updatedAt: proj.updatedAt || now,
                         manualOrder,
@@ -2137,6 +2188,13 @@
             };
 
             const importProjectFiles = (dataList) => importProjectPayloads(dataList);
+            const importProjectFilesToFolder = (category, dataList) => {
+                if (!category || category === 'ALL') {
+                    alert('インポート先フォルダを選択してください。');
+                    return;
+                }
+                importProjectPayloads(dataList, { forceCategory: category });
+            };
 
             const syncImportFromFolder = (category, payloads) => {
                 if (!category || category === 'ALL') {
@@ -2228,7 +2286,7 @@
                     </header>
 
                     {appMode === 'home' && (
-                        <HomeScreen projects={projectList} customFolders={customFolders} onOpen={openProject} onCreateNew={createNewProject} onCreateInFolder={createNewProject} onDelete={deleteProject} onMoveToFolder={moveProjectToCategory} onMoveProjectOrder={moveProjectOrder} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImportFiles={importProjectFiles} onSyncFromFolder={syncImportFromFolder} onCreateFolder={createFolder} onDeleteFolder={deleteFolder} />
+                        <HomeScreen projects={projectList} customFolders={customFolders} onOpen={openProject} onCreateNew={createNewProject} onCreateInFolder={createNewProject} onDelete={deleteProject} onMoveToFolder={moveProjectToCategory} onMoveProjectOrder={moveProjectOrder} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImportFiles={importProjectFiles} onImportFilesToFolder={importProjectFilesToFolder} onSyncFromFolder={syncImportFromFolder} onCreateFolder={createFolder} onDeleteFolder={deleteFolder} onRenameFolder={renameFolder} />
                     )}
                     {appMode === 'setup' && (
                         <SetupScreen initialName={currentProjectName} initialCategory={currentProjectCategory} isNew={!currentProjectId} onSave={handleSetupSave}
