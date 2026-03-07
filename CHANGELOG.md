@@ -3,6 +3,7 @@
 ## Unreleased
 
 - （開発中の変更はここに追記）
+- `chrome_extension/` に dev版起動用の最小Chrome拡張（MV3ランチャー）を追加
 
 ---
 
