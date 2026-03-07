@@ -189,6 +189,13 @@
             },
             saveManualSaveConfig(config) {
                 localStorage.setItem('annotator-qa-manual-save-config', JSON.stringify(config));
+            },
+            getHomeListPrefs() {
+                try { return JSON.parse(localStorage.getItem('annotator-qa-home-list-prefs') || '{}'); }
+                catch(e) { return {}; }
+            },
+            saveHomeListPrefs(prefs) {
+                localStorage.setItem('annotator-qa-home-list-prefs', JSON.stringify(prefs));
             }
         };
 
@@ -427,9 +434,10 @@
 
 
         // --- ホーム画面 ---
-        const HomeScreen = ({ projects, onOpen, onCreateNew, onCreateInFolder, onDelete, onMoveToFolder, onExportSingle, onExportAll, onImport }) => {
+        const HomeScreen = ({ projects, onOpen, onCreateNew, onCreateInFolder, onDelete, onMoveToFolder, onMoveProjectOrder, onExportSingle, onExportAll, onImport }) => {
             const [selectedFolder, setSelectedFolder] = useState('ALL');
             const [viewMode, setViewMode] = useState('TREE');
+            const [sortMode, setSortMode] = useState(() => Storage.getHomeListPrefs().sortMode || 'CREATED_ASC');
             const fileInputRef = useRef(null);
             const normalizeFolder = (category) => (category || '未分類');
             const handleFileChange = (e) => {
@@ -445,13 +453,24 @@
             }, {});
             const folderNames = Object.keys(folderStats).sort((a, b) => a.localeCompare(b, 'ja'));
             useEffect(() => {
+                Storage.saveHomeListPrefs({ sortMode });
+            }, [sortMode]);
+            const sortProjects = (list) => {
+                const arr = [...list];
+                if (sortMode === 'CREATED_DESC') return arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                if (sortMode === 'UPDATED_DESC') return arr.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+                if (sortMode === 'NAME_ASC') return arr.sort((a, b) => (a.name || '').localeCompare((b.name || ''), 'ja'));
+                if (sortMode === 'MANUAL') return arr.sort((a, b) => (a.manualOrder ?? 0) - (b.manualOrder ?? 0));
+                return arr.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+            };
+            useEffect(() => {
                 if (selectedFolder !== 'ALL' && !folderNames.includes(selectedFolder)) {
                     setSelectedFolder(folderNames[0] || 'ALL');
                 }
             }, [selectedFolder, folderNames]);
             const visibleProjects = selectedFolder === 'ALL'
-                ? [...projects].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-                : [...projects].filter(p => normalizeFolder(p.category) === selectedFolder).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+                ? sortProjects(projects)
+                : sortProjects(projects.filter(p => normalizeFolder(p.category) === selectedFolder));
 
             const ProjectCard = ({ project }) => (
                 <div key={project.id} onClick={() => onOpen(project.id)} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group">
@@ -474,6 +493,12 @@
                                 {folderNames.map(folder => <option key={folder} value={folder}>{folder}</option>)}
                             </select>
                             <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                                {sortMode === 'MANUAL' && (
+                                    <>
+                                        <button onClick={() => onMoveProjectOrder(project.id, -1)} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-slate-700 hover:bg-slate-100 transition-colors" title="上へ"><i className="ph ph-arrow-up text-lg"></i></button>
+                                        <button onClick={() => onMoveProjectOrder(project.id, 1)} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-slate-700 hover:bg-slate-100 transition-colors" title="下へ"><i className="ph ph-arrow-down text-lg"></i></button>
+                                    </>
+                                )}
                                 <button onClick={() => onExportSingle(project.id)} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="エクスポート（JSON）"><i className="ph ph-download-simple text-lg"></i></button>
                                 <button onClick={() => { if(confirm('「'+project.name+'」を削除しますか？この操作は元に戻せません。')) onDelete(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除"><i className="ph ph-trash text-lg"></i></button>
                             </div>
@@ -507,7 +532,14 @@
                         </div>
 
                         {projects.length > 0 && (
-                            <div className="mb-5 flex items-center gap-2">
+                            <div className="mb-5 flex flex-wrap items-center gap-2">
+                                <select value={sortMode} onChange={(e) => setSortMode(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-300 bg-white text-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" title="並び順">
+                                    <option value="CREATED_ASC">作成日（古い順）</option>
+                                    <option value="CREATED_DESC">作成日（新しい順）</option>
+                                    <option value="UPDATED_DESC">最終更新順</option>
+                                    <option value="NAME_ASC">名前（五十音順）</option>
+                                    <option value="MANUAL">手動並び替え</option>
+                                </select>
                                 <button onClick={() => setViewMode('TREE')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${viewMode === 'TREE' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-300'}`}>
                                     フォルダ表示
                                 </button>
@@ -1346,7 +1378,14 @@
             // 初期化
             useEffect(() => {
                 const rawList = Storage.getProjectList();
-                const migratedList = rawList.map(p => ({ ...p, category: p.category || '未分類' }));
+                const now = Date.now();
+                const migratedList = rawList.map((p, idx) => ({
+                    ...p,
+                    category: p.category || '未分類',
+                    createdAt: p.createdAt || p.updatedAt || (now + idx),
+                    updatedAt: p.updatedAt || p.createdAt || (now + idx),
+                    manualOrder: Number.isFinite(p.manualOrder) ? p.manualOrder : idx
+                }));
                 setProjectList(migratedList);
                 if (JSON.stringify(rawList) !== JSON.stringify(migratedList)) Storage.saveProjectList(migratedList);
                 const saved = Storage.getManualSaveConfig();
@@ -1409,6 +1448,19 @@
             const deleteProject = (id) => {
                 Storage.deleteProjectData(id);
                 setProjectList(prev => { const u = prev.filter(p => p.id !== id); Storage.saveProjectList(u); return u; });
+            };
+            const moveProjectOrder = (id, direction) => {
+                setProjectList(prev => {
+                    const ordered = [...prev].sort((a, b) => (a.manualOrder ?? 0) - (b.manualOrder ?? 0));
+                    const idx = ordered.findIndex(p => p.id === id);
+                    if (idx < 0) return prev;
+                    const nextIdx = idx + direction;
+                    if (nextIdx < 0 || nextIdx >= ordered.length) return prev;
+                    [ordered[idx], ordered[nextIdx]] = [ordered[nextIdx], ordered[idx]];
+                    const mapped = ordered.map((p, order) => ({ ...p, manualOrder: order }));
+                    Storage.saveProjectList(mapped);
+                    return mapped;
+                });
             };
             const moveProjectToCategory = (id, categoryInput) => {
                 const category = (categoryInput || '').trim() || '未分類';
@@ -1545,7 +1597,8 @@
                 let newNodes = { ...nodes };
                 if (!id) {
                     id = generateId();
-                    const newProject = { id, name, category, createdAt: now, updatedAt: now, nodeCount: 1, annotationCount: 0, preview: '質問一覧から展開して確認してください。' };
+                    const manualOrder = projectList.reduce((max, p) => Math.max(max, Number.isFinite(p.manualOrder) ? p.manualOrder : 0), -1) + 1;
+                    const newProject = { id, name, category, createdAt: now, updatedAt: now, manualOrder, nodeCount: 1, annotationCount: 0, preview: '質問一覧から展開して確認してください。' };
                     setProjectList(prev => { const u = [newProject, ...prev]; Storage.saveProjectList(u); return u; });
                     newNodes = { root: { id: 'root', parentId: null, question: name, sections: [{ id: generateId(), title: '', content: '' }], children: [] } };
                 } else {
@@ -1897,7 +1950,8 @@
                 data.projects.forEach(proj => {
                     const id = generateId(); const now = Date.now();
                     const migratedNodes = migrateNodes(proj.nodes || {});
-                    newList.unshift({ id, name: proj.name || '名前なし', category: proj.category || '未分類', createdAt: proj.createdAt || now, updatedAt: proj.updatedAt || now, nodeCount: Object.keys(migratedNodes).length, annotationCount: (proj.annotations || []).length, preview: migratedNodes?.root?.sections?.[0]?.content?.substring(0, 100) || '' });
+                    const manualOrder = newList.reduce((max, p) => Math.max(max, Number.isFinite(p.manualOrder) ? p.manualOrder : 0), -1) + 1;
+                    newList.unshift({ id, name: proj.name || '名前なし', category: proj.category || '未分類', createdAt: proj.createdAt || now, updatedAt: proj.updatedAt || now, manualOrder, nodeCount: Object.keys(migratedNodes).length, annotationCount: (proj.annotations || []).length, preview: migratedNodes?.root?.sections?.[0]?.content?.substring(0, 100) || '' });
                     Storage.saveProjectData(id, { nodes: migratedNodes, annotations: migrateAnnotations(proj.annotations || []) });
                     count++;
                 });
@@ -1944,7 +1998,7 @@
                     </header>
 
                     {appMode === 'home' && (
-                        <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onCreateInFolder={createNewProject} onDelete={deleteProject} onMoveToFolder={moveProjectToCategory} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImport={importProjects} />
+                        <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onCreateInFolder={createNewProject} onDelete={deleteProject} onMoveToFolder={moveProjectToCategory} onMoveProjectOrder={moveProjectOrder} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImport={importProjects} />
                     )}
                     {appMode === 'setup' && (
                         <SetupScreen initialName={currentProjectName} initialCategory={currentProjectCategory} isNew={!currentProjectId} onSave={handleSetupSave}
