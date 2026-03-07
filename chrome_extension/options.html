@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QAmatomer Dev Launcher 設定</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
+    main { max-width: 720px; margin: 0 auto; padding: 24px; }
+    h1 { margin: 0 0 12px; font-size: 22px; }
+    p { color: #475569; line-height: 1.6; }
+    label { display: block; margin: 16px 0 8px; font-weight: 700; }
+    input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #cbd5e1; }
+    .actions { display: flex; gap: 8px; margin-top: 12px; }
+    button { border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
+    #save { background: #2563eb; color: #fff; }
+    #reset { background: #e2e8f0; color: #0f172a; }
+    #status { margin-top: 8px; font-size: 13px; }
+    code { background: #e2e8f0; padding: 2px 4px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>QAmatomer Dev Launcher 設定</h1>
+    <p>拡張が開くURLを設定します。通常はローカル配信の <code>QAmatomer_dev.html</code> を指定します。</p>
+    <label for="devUrl">Dev URL</label>
+    <input id="devUrl" type="url" placeholder="http://127.0.0.1:4173/QAmatomer_dev.html" />
+    <div class="actions">
+      <button id="save">保存</button>
+      <button id="reset">デフォルトに戻す</button>
+    </div>
+    <div id="status"></div>
+  </main>
+  <script src="options.js"></script>
+</body>
+</html>
