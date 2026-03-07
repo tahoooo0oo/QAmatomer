@@ -441,6 +441,7 @@
             const fileInputRef = useRef(null);
             const multiFileInputRef = useRef(null);
             const folderFileInputRef = useRef(null);
+            const syncFolderInputRef = useRef(null);
             const normalizeFolder = (category) => (category || '未分類');
             const parseJsonFile = async (file) => {
                 try {
@@ -469,6 +470,14 @@
                 const parsedList = (await Promise.all(files.map(parseJsonFile))).filter(Boolean);
                 if (parsedList.length === 0) { alert('有効なJSONファイルを読み込めませんでした。'); e.target.value = ''; return; }
                 onImportFiles(parsedList); e.target.value = '';
+            };
+            const handleSyncFolderChange = async (e) => {
+                const files = Array.from(e.target.files || []).filter(f => f.name.toLowerCase().endsWith('.json'));
+                if (selectedFolder === 'ALL') { alert('同期先フォルダを選択してください。'); e.target.value = ''; return; }
+                if (files.length === 0) { alert('同期に使えるJSONファイルが見つかりませんでした。'); e.target.value = ''; return; }
+                const parsedList = (await Promise.all(files.map(parseJsonFile))).filter(Boolean);
+                if (parsedList.length === 0) { alert('有効なJSONファイルを読み込めませんでした。'); e.target.value = ''; return; }
+                onSyncFromFolder(selectedFolder, parsedList); e.target.value = '';
             };
             const folderStats = projects.reduce((acc, p) => {
                 const folder = normalizeFolder(p.category);
@@ -549,12 +558,16 @@
                                 <button onClick={() => folderFileInputRef.current?.click()} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
                                     <i className="ph-bold ph-folder-open"></i> フォルダ読込
                                 </button>
-                                <button onClick={onSyncFromFolder} className="px-4 py-2.5 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 font-medium text-sm flex items-center gap-2 transition-colors" title="選択フォルダ内JSONに合わせて一覧を更新します">
-                                    <i className="ph-bold ph-arrows-clockwise"></i> フォルダ同期更新
+                                <button onClick={() => {
+                                    if (selectedFolder === 'ALL') { alert('左側のフォルダ一覧から同期対象フォルダを選択してください。'); return; }
+                                    syncFolderInputRef.current?.click();
+                                }} className="px-4 py-2.5 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 font-medium text-sm flex items-center gap-2 transition-colors" title="選択中フォルダのページ一覧をJSONに合わせて更新します">
+                                    <i className="ph-bold ph-arrows-clockwise"></i> 選択フォルダ同期
                                 </button>
                                 <input ref={fileInputRef} type="file" accept=".json" onChange={handleFileChange} className="hidden" />
                                 <input ref={multiFileInputRef} type="file" accept=".json" multiple onChange={handleMultiFileChange} className="hidden" />
                                 <input ref={folderFileInputRef} type="file" accept=".json" multiple webkitdirectory="" directory="" onChange={handleFolderFileChange} className="hidden" />
+                                <input ref={syncFolderInputRef} type="file" accept=".json" multiple onChange={handleSyncFolderChange} className="hidden" />
                                 {projects.length > 0 && (
                                     <button onClick={onExportAll} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
                                         <i className="ph-bold ph-download-simple"></i> 全てエクスポート
@@ -2072,38 +2085,55 @@
             const importProjects = (data) => importProjectPayloads([data]);
             const importProjectFiles = (dataList) => importProjectPayloads(dataList);
 
-            const syncImportFromFolder = async () => {
-                if (!window.showDirectoryPicker) {
-                    alert('このブラウザではフォルダ同期に未対応です。複数インポートを使ってください。');
+            const syncImportFromFolder = (category, payloads) => {
+                if (!category || category === 'ALL') {
+                    alert('同期先フォルダを選択してください。');
                     return;
                 }
-                try {
-                    const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
-                    const payloads = [];
-                    const walk = async (handle) => {
-                        for await (const [name, entry] of handle.entries()) {
-                            if (entry.kind === 'directory') {
-                                await walk(entry);
-                                continue;
-                            }
-                            if (!name.toLowerCase().endsWith('.json')) continue;
-                            try {
-                                const file = await entry.getFile();
-                                const text = await file.text();
-                                payloads.push(JSON.parse(text));
-                            } catch (e) {}
-                        }
-                    };
-                    await walk(dirHandle);
-                    if (payloads.length === 0) {
-                        alert('フォルダ内に有効なJSONファイルが見つかりませんでした。');
-                        return;
-                    }
-                    if (!confirm(`フォルダ内の ${payloads.length} 件を読み込み、現在の一覧を置き換えます。よろしいですか？`)) return;
-                    importProjectPayloads(payloads, { replaceAll: true });
-                } catch (e) {
-                    if (e?.name !== 'AbortError') alert('フォルダ同期に失敗しました。');
+                const targets = [];
+                let invalidCount = 0;
+                payloads.forEach(payload => {
+                    const arr = extractImportTargets(payload);
+                    if (!arr) invalidCount++;
+                    else targets.push(...arr);
+                });
+                if (targets.length === 0) {
+                    alert('有効なJSONデータが見つかりませんでした。');
+                    return;
                 }
+                if (!confirm(`「${category}」フォルダ内のページを、読み込んだ ${targets.length} 件で置き換えます。よろしいですか？`)) return;
+
+                const prevInCategory = projectList.filter(p => (p.category || '未分類') === category);
+                prevInCategory.forEach(p => Storage.deleteProjectData(p.id));
+                const baseList = projectList.filter(p => (p.category || '未分類') !== category);
+
+                const newList = [...baseList];
+                let count = 0;
+                targets.forEach(proj => {
+                    const id = generateId(); const now = Date.now();
+                    const migratedNodes = migrateNodes(proj.nodes || {});
+                    const migratedAnnotations = migrateAnnotations(proj.annotations || []);
+                    const manualOrder = newList.reduce((max, p) => Math.max(max, Number.isFinite(p.manualOrder) ? p.manualOrder : 0), -1) + 1;
+                    newList.unshift({
+                        id,
+                        name: proj.name || '名前なし',
+                        category,
+                        createdAt: proj.createdAt || now,
+                        updatedAt: proj.updatedAt || now,
+                        manualOrder,
+                        nodeCount: Object.keys(migratedNodes).length,
+                        annotationCount: migratedAnnotations.length,
+                        preview: migratedNodes?.root?.sections?.[0]?.content?.substring(0, 100) || ''
+                    });
+                    Storage.saveProjectData(id, { nodes: migratedNodes, annotations: migratedAnnotations });
+                    count++;
+                });
+                Storage.saveProjectList(newList); setProjectList(newList);
+
+                if (currentProjectId && prevInCategory.some(p => p.id === currentProjectId)) {
+                    goHome();
+                }
+                alert(`${category} フォルダを ${count} 件で同期しました。` + (invalidCount > 0 ? `（${invalidCount}件は形式不正でスキップ）` : ''));
             };
 
 
