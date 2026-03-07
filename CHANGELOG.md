@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## Unreleased
+
+**追加**
+- File System Access API を使った「安全保存（ローカルファイル自動バックアップ）」を追加
+- ヘッダーに「安全保存を接続」「自動保存 ON/OFF」UIを追加
+
+**ドキュメント**
+- README に安全保存の使い方を追記
+- `docs/WORKFLOW.md` に安全保存運用を追記
+
+---
+
 ## QAmatomer v3（現在の安定版）
 
 **主な変更**
