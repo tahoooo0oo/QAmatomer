@@ -1,0 +1,29 @@
+{
+  "type": "annotator-qa-project-file",
+  "version": 1,
+  "savedAt": 1772860466612,
+  "project": {
+    "id": "ryqhp44ka",
+    "name": "Kojima",
+    "category": "BDHT2026",
+    "createdAt": 1772598634548,
+    "updatedAt": 1772860466612,
+    "nodes": {
+      "root": {
+        "id": "root",
+        "parentId": null,
+        "question": "Kojima",
+        "children": [],
+        "parentAnnotationId": null,
+        "sections": [
+          {
+            "id": "jslevxmtu",
+            "title": "",
+            "content": ""
+          }
+        ]
+      }
+    },
+    "annotations": []
+  }
+}
