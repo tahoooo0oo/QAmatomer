@@ -183,42 +183,42 @@
             deleteProjectData(id) {
                 localStorage.removeItem('annotator-qa-project-' + id);
             },
-            getBackupConfig() {
-                try { return JSON.parse(localStorage.getItem('annotator-qa-backup-config') || '{}'); }
+            getManualSaveConfig() {
+                try { return JSON.parse(localStorage.getItem('annotator-qa-manual-save-config') || '{}'); }
                 catch(e) { return {}; }
             },
-            saveBackupConfig(config) {
-                localStorage.setItem('annotator-qa-backup-config', JSON.stringify(config));
+            saveManualSaveConfig(config) {
+                localStorage.setItem('annotator-qa-manual-save-config', JSON.stringify(config));
             }
         };
 
-        const BackupFile = {
+        const ManualSave = {
             isSupported() {
-                return !!(window.showSaveFilePicker && window.indexedDB);
+                return !!(window.showDirectoryPicker && window.indexedDB);
             },
             openDb() {
                 return new Promise((resolve, reject) => {
-                    const req = indexedDB.open('annotator-qa-backup-db', 1);
+                    const req = indexedDB.open('annotator-qa-manual-save-db', 1);
                     req.onupgradeneeded = () => req.result.createObjectStore('kv');
                     req.onsuccess = () => resolve(req.result);
                     req.onerror = () => reject(req.error);
                 });
             },
-            async getHandle() {
+            async getDirectoryHandle() {
                 if (!this.isSupported()) return null;
                 const db = await this.openDb();
                 return await new Promise((resolve, reject) => {
                     const tx = db.transaction('kv', 'readonly');
-                    const req = tx.objectStore('kv').get('backup-file-handle');
+                    const req = tx.objectStore('kv').get('save-dir-handle');
                     req.onsuccess = () => resolve(req.result || null);
                     req.onerror = () => reject(req.error);
                 });
             },
-            async setHandle(handle) {
+            async setDirectoryHandle(handle) {
                 const db = await this.openDb();
                 await new Promise((resolve, reject) => {
                     const tx = db.transaction('kv', 'readwrite');
-                    tx.objectStore('kv').put(handle, 'backup-file-handle');
+                    tx.objectStore('kv').put(handle, 'save-dir-handle');
                     tx.oncomplete = () => resolve();
                     tx.onerror = () => reject(tx.error);
                 });
@@ -230,16 +230,20 @@
                 if (!request) return false;
                 return (await handle.requestPermission(opts)) === 'granted';
             },
-            async pickHandle() {
-                return await window.showSaveFilePicker({
-                    suggestedName: 'qa-tree-auto-backup.json',
-                    types: [{ description: 'JSON', accept: { 'application/json': ['.json'] } }]
-                });
+            async pickDirectory() {
+                return await window.showDirectoryPicker({ mode: 'readwrite' });
             },
-            async write(handle, data) {
-                const writable = await handle.createWritable();
+            sanitizeFileName(name) {
+                const base = (name || 'untitled').trim().replace(/[\/:*?"<>|]/g, '_').replace(/\s+/g, '_');
+                return (base || 'untitled') + '.json';
+            },
+            async writeProjectFile(dirHandle, projectName, data) {
+                const fileName = this.sanitizeFileName(projectName);
+                const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+                const writable = await fileHandle.createWritable();
                 await writable.write(JSON.stringify(data, null, 2));
                 await writable.close();
+                return fileName;
             }
         };
 
@@ -1224,37 +1228,46 @@
             const [searchResults, setSearchResults] = useState([]);
             const searchInputRef = useRef(null);
             const scrollContainerRef = useRef(null);
-            const backupHandleRef = useRef(null);
-            const backupTimerRef = useRef(null);
-            const backupInProgressRef = useRef(false);
-            const [backupConfig, setBackupConfig] = useState({
-                supported: BackupFile.isSupported(),
-                enabled: false,
-                fileName: '',
+            const saveDirHandleRef = useRef(null);
+            const historyUndoRef = useRef([]);
+            const historyRedoRef = useRef([]);
+            const historySuspendRef = useRef(false);
+            const lastSnapshotRef = useRef('');
+            const [manualSaveStatus, setManualSaveStatus] = useState({
+                supported: ManualSave.isSupported(),
+                connected: false,
+                folderName: '',
                 lastSavedAt: null,
+                lastSavedFile: '',
                 lastError: ''
             });
+
+            const resetHistory = () => {
+                historyUndoRef.current = [];
+                historyRedoRef.current = [];
+                lastSnapshotRef.current = '';
+            };
 
             // 初期化
             useEffect(() => {
                 setProjectList(Storage.getProjectList());
-                const saved = Storage.getBackupConfig();
-                setBackupConfig(prev => ({ ...prev, ...saved, supported: BackupFile.isSupported() }));
+                const saved = Storage.getManualSaveConfig();
+                setManualSaveStatus(prev => ({ ...prev, ...saved, supported: ManualSave.isSupported() }));
                 (async () => {
-                    if (!BackupFile.isSupported()) return;
+                    if (!ManualSave.isSupported()) return;
                     try {
-                        const handle = await BackupFile.getHandle();
+                        const handle = await ManualSave.getDirectoryHandle();
                         if (!handle) return;
-                        const granted = await BackupFile.requestWritePermission(handle, false);
-                        backupHandleRef.current = handle;
-                        setBackupConfig(prev => ({
+                        saveDirHandleRef.current = handle;
+                        const granted = await ManualSave.requestWritePermission(handle, false);
+                        setManualSaveStatus(prev => ({
                             ...prev,
-                            fileName: handle.name || prev.fileName || '',
-                            enabled: Boolean((saved?.enabled) && granted),
-                            lastError: granted ? '' : 'バックアップファイルの再接続が必要です'
+                            connected: granted,
+                            folderName: handle.name || prev.folderName || '',
+                            lastError: granted ? '' : '保存フォルダの再接続が必要です'
                         }));
                     } catch (e) {
-                        setBackupConfig(prev => ({ ...prev, enabled: false, lastError: 'バックアップ初期化に失敗しました' }));
+                        setManualSaveStatus(prev => ({ ...prev, connected: false, lastError: '保存設定の初期化に失敗しました' }));
                     }
                 })();
             }, []);
@@ -1290,10 +1303,11 @@
                     setCurrentProjectId(id); setCurrentProjectName(meta.name);
                     setNodes(migrateNodes(data.nodes)); setAnnotations(migrateAnnotations(data.annotations || []));
                     setTreeExpandedIds(new Set(Object.keys(data.nodes).filter(k => k !== 'root')));
+                    resetHistory();
                     setAppMode('workspace'); setPanes([{ type: 'view', nodeId: 'root' }]);
                 }
             };
-            const createNewProject = () => { setCurrentProjectId(null); setCurrentProjectName(''); setNodes({}); setAnnotations([]); setAppMode('setup'); };
+            const createNewProject = () => { setCurrentProjectId(null); setCurrentProjectName(''); setNodes({}); setAnnotations([]); resetHistory(); setAppMode('setup'); };
             const deleteProject = (id) => {
                 Storage.deleteProjectData(id);
                 setProjectList(prev => { const u = prev.filter(p => p.id !== id); Storage.saveProjectList(u); return u; });
@@ -1356,18 +1370,33 @@
                 setSearchResults(deduped);
             };
 
-            // Keyboard shortcut Ctrl+K / Cmd+K
+            // Keyboard shortcut (検索/保存/Undo/Redo)
             useEffect(() => {
                 const handler = (e) => {
-                    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                    const isMod = e.ctrlKey || e.metaKey;
+                    const target = e.target;
+                    const isEditable = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+                    if (isMod && e.key.toLowerCase() === 'k') {
                         e.preventDefault();
                         if (appMode === 'workspace') { searchOpen ? closeSearch() : openSearch(); }
+                    }
+                    if (isMod && e.key.toLowerCase() === 's') {
+                        e.preventDefault();
+                        if (appMode === 'workspace') saveCurrentProjectToFolder();
+                    }
+                    if (!isEditable && isMod && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (appMode === 'workspace') undoChange();
+                    }
+                    if (!isEditable && isMod && e.key.toLowerCase() === 'z' && e.shiftKey) {
+                        e.preventDefault();
+                        if (appMode === 'workspace') redoChange();
                     }
                     if (e.key === 'Escape' && searchOpen) closeSearch();
                 };
                 window.addEventListener('keydown', handler);
                 return () => window.removeEventListener('keydown', handler);
-            }, [appMode, searchOpen]);
+            }, [appMode, searchOpen, nodes, annotations, currentProjectName, currentProjectId, manualSaveStatus.connected]);
 
             const handleSearchNavigate = (result) => {
                 closeSearch();
@@ -1609,89 +1638,128 @@
             };
 
 
-            const updateBackupConfig = (patch) => {
-                setBackupConfig(prev => {
+            const updateManualSaveStatus = (patch) => {
+                setManualSaveStatus(prev => {
                     const next = { ...prev, ...patch };
-                    Storage.saveBackupConfig({ enabled: next.enabled, fileName: next.fileName, lastSavedAt: next.lastSavedAt, lastError: next.lastError });
+                    Storage.saveManualSaveConfig({
+                        connected: next.connected,
+                        folderName: next.folderName,
+                        lastSavedAt: next.lastSavedAt,
+                        lastSavedFile: next.lastSavedFile,
+                        lastError: next.lastError
+                    });
                     return next;
                 });
             };
 
-            const buildBackupData = () => {
-                const projects = projectList.map(meta => {
-                    const data = meta.id === currentProjectId ? { nodes, annotations } : (Storage.getProjectData(meta.id) || { nodes: {}, annotations: [] });
-                    return {
-                        id: meta.id,
-                        name: meta.name,
-                        createdAt: meta.createdAt,
-                        updatedAt: meta.updatedAt,
-                        nodes: data.nodes || {},
-                        annotations: data.annotations || []
-                    };
-                });
+            const buildCurrentProjectSaveData = () => {
+                const meta = projectList.find(p => p.id === currentProjectId);
                 return {
-                    type: 'annotator-qa-auto-backup',
+                    type: 'annotator-qa-project-file',
                     version: 1,
-                    exportedAt: Date.now(),
-                    projects
+                    savedAt: Date.now(),
+                    project: {
+                        id: currentProjectId,
+                        name: currentProjectName || meta?.name || '名前なし',
+                        createdAt: meta?.createdAt || Date.now(),
+                        updatedAt: Date.now(),
+                        nodes,
+                        annotations
+                    }
                 };
             };
 
-            const connectBackup = async () => {
-                if (!BackupFile.isSupported()) {
-                    alert('このブラウザは安全保存（ファイルへの自動保存）に未対応です。JSONエクスポートを併用してください。');
+            const connectSaveFolder = async () => {
+                if (!ManualSave.isSupported()) {
+                    alert('このブラウザはフォルダ保存機能に未対応です。JSONエクスポートを併用してください。');
                     return;
                 }
                 try {
-                    const handle = await BackupFile.pickHandle();
-                    const granted = await BackupFile.requestWritePermission(handle, true);
+                    const dirHandle = await ManualSave.pickDirectory();
+                    const granted = await ManualSave.requestWritePermission(dirHandle, true);
                     if (!granted) {
-                        alert('書き込み権限がないため接続できませんでした。');
+                        alert('フォルダへの書き込み権限がありません。');
                         return;
                     }
-                    backupHandleRef.current = handle;
-                    await BackupFile.setHandle(handle);
-                    const data = buildBackupData();
-                    await BackupFile.write(handle, data);
-                    updateBackupConfig({ enabled: true, fileName: handle.name || 'qa-tree-auto-backup.json', lastSavedAt: Date.now(), lastError: '' });
-                    alert('安全保存ファイルを接続しました。以後は編集内容が自動保存されます。');
+                    saveDirHandleRef.current = dirHandle;
+                    await ManualSave.setDirectoryHandle(dirHandle);
+                    updateManualSaveStatus({ connected: true, folderName: dirHandle.name || '', lastError: '' });
+                    alert('保存フォルダを接続しました。Ctrl/Cmd + S で現在のまとめを保存できます。');
                 } catch (e) {
-                    if (e?.name !== 'AbortError') alert('バックアップ接続に失敗しました。');
+                    if (e?.name !== 'AbortError') alert('保存フォルダの接続に失敗しました。');
                 }
             };
 
-            const toggleAutoBackup = () => {
-                if (!backupHandleRef.current) {
-                    alert('先に「安全保存を接続」を実行してください。');
+            const saveCurrentProjectToFolder = async () => {
+                if (!currentProjectId || !nodes['root']) return;
+                if (!saveDirHandleRef.current) {
+                    alert('先に「保存フォルダを接続」を実行してください。');
                     return;
                 }
-                updateBackupConfig({ enabled: !backupConfig.enabled, lastError: '' });
+                const granted = await ManualSave.requestWritePermission(saveDirHandleRef.current, true);
+                if (!granted) {
+                    updateManualSaveStatus({ connected: false, lastError: '保存権限がないため保存できませんでした' });
+                    alert('保存権限がないため保存できませんでした。再接続してください。');
+                    return;
+                }
+                try {
+                    const payload = buildCurrentProjectSaveData();
+                    const fileName = await ManualSave.writeProjectFile(saveDirHandleRef.current, currentProjectName, payload);
+                    updateManualSaveStatus({
+                        connected: true,
+                        folderName: saveDirHandleRef.current.name || manualSaveStatus.folderName,
+                        lastSavedAt: Date.now(),
+                        lastSavedFile: fileName,
+                        lastError: ''
+                    });
+                } catch (e) {
+                    updateManualSaveStatus({ lastError: '手動保存に失敗しました' });
+                    alert('手動保存に失敗しました。');
+                }
+            };
+
+            const getSnapshotString = () => JSON.stringify({ nodes, annotations, currentProjectName });
+            const applySnapshot = (snapshotString) => {
+                try {
+                    const parsed = JSON.parse(snapshotString);
+                    historySuspendRef.current = true;
+                    setNodes(parsed.nodes || {});
+                    setAnnotations(parsed.annotations || []);
+                    setCurrentProjectName(parsed.currentProjectName || '');
+                    lastSnapshotRef.current = snapshotString;
+                    setTimeout(() => { historySuspendRef.current = false; }, 0);
+                } catch (e) {}
+            };
+            const undoChange = () => {
+                if (historyUndoRef.current.length === 0) return;
+                const current = getSnapshotString();
+                const prev = historyUndoRef.current.pop();
+                historyRedoRef.current.push(current);
+                applySnapshot(prev);
+            };
+            const redoChange = () => {
+                if (historyRedoRef.current.length === 0) return;
+                const current = getSnapshotString();
+                const next = historyRedoRef.current.pop();
+                historyUndoRef.current.push(current);
+                applySnapshot(next);
             };
 
             useEffect(() => {
-                if (!backupConfig.enabled || !backupHandleRef.current || !currentProjectId) return;
-                if (backupTimerRef.current) clearTimeout(backupTimerRef.current);
-                backupTimerRef.current = setTimeout(async () => {
-                    if (backupInProgressRef.current) return;
-                    backupInProgressRef.current = true;
-                    try {
-                        const granted = await BackupFile.requestWritePermission(backupHandleRef.current, false);
-                        if (!granted) {
-                            updateBackupConfig({ enabled: false, lastError: '権限が切れたため自動保存を停止しました。再接続してください。' });
-                            return;
-                        }
-                        await BackupFile.write(backupHandleRef.current, buildBackupData());
-                        updateBackupConfig({ lastSavedAt: Date.now(), lastError: '' });
-                    } catch (e) {
-                        updateBackupConfig({ lastError: '自動保存に失敗しました。' });
-                    } finally {
-                        backupInProgressRef.current = false;
-                    }
-                }, 1500);
-                return () => {
-                    if (backupTimerRef.current) clearTimeout(backupTimerRef.current);
-                };
-            }, [nodes, annotations, projectList, currentProjectId, backupConfig.enabled]);
+                if (!currentProjectId || !nodes['root']) return;
+                const snap = getSnapshotString();
+                if (!lastSnapshotRef.current) {
+                    lastSnapshotRef.current = snap;
+                    return;
+                }
+                if (historySuspendRef.current) return;
+                if (snap !== lastSnapshotRef.current) {
+                    historyUndoRef.current.push(lastSnapshotRef.current);
+                    if (historyUndoRef.current.length > 100) historyUndoRef.current.shift();
+                    historyRedoRef.current = [];
+                    lastSnapshotRef.current = snap;
+                }
+            }, [nodes, annotations, currentProjectName, currentProjectId]);
 
             // --- エクスポート / インポート ---
             const doExport = (projectIds) => {
@@ -1748,19 +1816,19 @@
                             )}
                         </div>
                         <div className="ml-auto flex items-center gap-3">
-                            {backupConfig.supported && (
+                            {manualSaveStatus.supported && (
                                 <>
-                                    <button onClick={connectBackup} className="text-xs px-3 py-1.5 rounded-md border border-emerald-500/40 text-emerald-200 hover:text-white hover:border-emerald-300 transition-colors">
-                                        <i className="ph-bold ph-floppy-disk mr-1"></i> 安全保存を接続
+                                    <button onClick={connectSaveFolder} className="text-xs px-3 py-1.5 rounded-md border border-emerald-500/40 text-emerald-200 hover:text-white hover:border-emerald-300 transition-colors">
+                                        <i className="ph-bold ph-folder-simple-plus mr-1"></i> 保存フォルダを接続
                                     </button>
-                                    <button onClick={toggleAutoBackup} className={`text-xs px-3 py-1.5 rounded-md border transition-colors ${backupConfig.enabled ? 'border-emerald-300 text-white bg-emerald-600/30' : 'border-slate-500 text-slate-300 hover:text-white'}`}>
-                                        <i className={`ph-bold ${backupConfig.enabled ? 'ph-toggle-right' : 'ph-toggle-left'} mr-1`}></i> 自動保存 {backupConfig.enabled ? 'ON' : 'OFF'}
+                                    <button onClick={saveCurrentProjectToFolder} className="text-xs px-3 py-1.5 rounded-md border border-cyan-500/40 text-cyan-200 hover:text-white hover:border-cyan-300 transition-colors">
+                                        <i className="ph-bold ph-floppy-disk mr-1"></i> 保存 (Ctrl/Cmd+S)
                                     </button>
                                 </>
                             )}
-                            {!backupConfig.supported && <span className="text-[11px] text-amber-300">このブラウザでは安全保存未対応</span>}
-                            {backupConfig.fileName && <span className="hidden md:inline text-[11px] text-slate-400">{backupConfig.fileName}{backupConfig.lastSavedAt ? ` / ${new Date(backupConfig.lastSavedAt).toLocaleTimeString('ja-JP')} 保存` : ''}</span>}
-                            {backupConfig.lastError && <span className="hidden lg:inline text-[11px] text-rose-300">{backupConfig.lastError}</span>}
+                            {!manualSaveStatus.supported && <span className="text-[11px] text-amber-300">このブラウザではフォルダ保存未対応</span>}
+                            {manualSaveStatus.folderName && <span className="hidden md:inline text-[11px] text-slate-400">{manualSaveStatus.folderName}{manualSaveStatus.lastSavedFile ? ` / ${manualSaveStatus.lastSavedFile}` : ''}{manualSaveStatus.lastSavedAt ? ` / ${new Date(manualSaveStatus.lastSavedAt).toLocaleTimeString('ja-JP')} 保存` : ''}</span>}
+                            {manualSaveStatus.lastError && <span className="hidden lg:inline text-[11px] text-rose-300">{manualSaveStatus.lastError}</span>}
                             {appMode !== 'home' && <button onClick={goHome} className="text-slate-400 hover:text-white text-sm flex items-center gap-1.5 transition-colors font-medium"><i className="ph-bold ph-house"></i> ホーム</button>}
                         </div>
                     </header>

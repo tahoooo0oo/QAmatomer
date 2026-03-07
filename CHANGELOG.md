@@ -3,12 +3,15 @@
 ## Unreleased
 
 **追加**
-- File System Access API を使った「安全保存（ローカルファイル自動バックアップ）」を追加
-- ヘッダーに「安全保存を接続」「自動保存 ON/OFF」UIを追加
+- File System Access API を使った「保存フォルダ + プロジェクト別JSONの手動保存」を追加
+- ヘッダーに「保存フォルダを接続」「保存 (Ctrl/Cmd+S)」UIを追加
+
+**追加**
+- Undo / Redo（`Ctrl/Cmd+Z`, `Ctrl/Cmd+Shift+Z`）を追加
 
 **ドキュメント**
-- README に安全保存の使い方を追記
-- `docs/WORKFLOW.md` に安全保存運用を追記
+- README に手動保存とUndo/Redoの使い方を追記
+- `docs/WORKFLOW.md` に保存運用を追記
 
 ---
 
