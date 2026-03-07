@@ -5,30 +5,11 @@ async function getDevUrl() {
   return devUrl || DEFAULT_DEV_URL;
 }
 
-async function getActiveTabId(fallbackTabId) {
-  if (fallbackTabId) return fallbackTabId;
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tab?.id;
-}
-
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type === 'OPEN_DEV') {
-    getDevUrl()
-      .then((url) => chrome.tabs.create({ url }))
-      .then(() => sendResponse({ ok: true }))
-      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
-    return true;
-  }
-
-  if (message?.type === 'OPEN_SIDEPANEL') {
-    getActiveTabId(sender?.tab?.id)
-      .then((tabId) => {
-        if (!tabId) throw new Error('active tab not found');
-        return chrome.sidePanel.setOptions({ tabId, path: 'sidepanel.html', enabled: true })
-          .then(() => chrome.sidePanel.open({ tabId }));
-      })
-      .then(() => sendResponse({ ok: true }))
-      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
-    return true;
-  }
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type !== 'OPEN_DEV') return;
+  getDevUrl()
+    .then((url) => chrome.tabs.create({ url }))
+    .then(() => sendResponse({ ok: true }))
+    .catch((error) => sendResponse({ ok: false, error: String(error?.message || error) }));
+  return true;
 });
