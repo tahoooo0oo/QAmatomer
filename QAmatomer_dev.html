@@ -427,9 +427,11 @@
 
 
         // --- ホーム画面 ---
-        const HomeScreen = ({ projects, onOpen, onCreateNew, onDelete, onExportSingle, onExportAll, onImport }) => {
+        const HomeScreen = ({ projects, onOpen, onCreateNew, onCreateInFolder, onDelete, onMoveToFolder, onExportSingle, onExportAll, onImport }) => {
             const [selectedFolder, setSelectedFolder] = useState('ALL');
+            const [viewMode, setViewMode] = useState('TREE');
             const fileInputRef = useRef(null);
+            const normalizeFolder = (category) => (category || '未分類');
             const handleFileChange = (e) => {
                 const file = e.target.files[0]; if (!file) return;
                 const reader = new FileReader();
@@ -437,22 +439,58 @@
                 reader.readAsText(file); e.target.value = '';
             };
             const folderStats = projects.reduce((acc, p) => {
-                const folder = p.category || '未分類';
+                const folder = normalizeFolder(p.category);
                 acc[folder] = (acc[folder] || 0) + 1;
                 return acc;
             }, {});
             const folderNames = Object.keys(folderStats).sort((a, b) => a.localeCompare(b, 'ja'));
-            const visibleProjects = selectedFolder === 'ALL' ? projects : projects.filter(p => (p.category || '未分類') === selectedFolder);
+            useEffect(() => {
+                if (selectedFolder !== 'ALL' && !folderNames.includes(selectedFolder)) {
+                    setSelectedFolder(folderNames[0] || 'ALL');
+                }
+            }, [selectedFolder, folderNames]);
+            const visibleProjects = selectedFolder === 'ALL'
+                ? [...projects].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+                : [...projects].filter(p => normalizeFolder(p.category) === selectedFolder).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+            const ProjectCard = ({ project }) => (
+                <div key={project.id} onClick={() => onOpen(project.id)} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group">
+                    <div className="p-5 flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <h3 className="font-bold text-gray-800 text-lg truncate group-hover:text-blue-600 transition-colors">{project.name}</h3>
+                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100"><i className="ph ph-folder-simple mr-1"></i>{normalizeFolder(project.category)}</span>
+                            </div>
+                            <div className="flex items-center gap-4 mt-2 text-sm text-gray-400 flex-wrap">
+                                <span className="flex items-center gap-1"><i className="ph ph-calendar-blank"></i>{new Date(project.createdAt).toLocaleDateString('ja-JP')}</span>
+                                <span className="flex items-center gap-1"><i className="ph ph-clock"></i>{new Date(project.updatedAt).toLocaleDateString('ja-JP')} 更新</span>
+                                <span className="flex items-center gap-1"><i className="ph ph-list-dashes"></i>{project.nodeCount || 0} ノード</span>
+                                {(project.annotationCount || 0) > 0 && <span className="flex items-center gap-1 text-amber-500"><i className="ph-fill ph-highlighter"></i>{project.annotationCount} 注釈</span>}
+                            </div>
+                            {project.preview && <p className="mt-3 text-sm text-gray-500 line-clamp-2 leading-relaxed">{project.preview}</p>}
+                        </div>
+                        <div className="flex flex-col items-end gap-2 ml-2 shrink-0" onClick={e => e.stopPropagation()}>
+                            <select value={normalizeFolder(project.category)} onChange={(e) => onMoveToFolder(project.id, e.target.value)} className="text-xs border border-gray-300 rounded-md px-2 py-1 bg-white text-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" title="フォルダを変更">
+                                {folderNames.map(folder => <option key={folder} value={folder}>{folder}</option>)}
+                            </select>
+                            <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => onExportSingle(project.id)} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="エクスポート（JSON）"><i className="ph ph-download-simple text-lg"></i></button>
+                                <button onClick={() => { if(confirm('「'+project.name+'」を削除しますか？この操作は元に戻せません。')) onDelete(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除"><i className="ph ph-trash text-lg"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
 
             return (
                 <div className="flex-1 overflow-y-auto bg-gray-50">
-                    <div className="max-w-4xl mx-auto px-6 py-10 animate-fade-in-up">
-                        <div className="flex items-center justify-between mb-8">
+                    <div className="max-w-6xl mx-auto px-6 py-10 animate-fade-in-up">
+                        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
                             <div>
                                 <h2 className="text-2xl font-bold text-gray-800">保存済みのQ&Aツリー</h2>
                                 <p className="text-gray-500 text-sm mt-1">{visibleProjects.length} / {projects.length} 件のまとめ</p>
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 flex-wrap justify-end">
                                 <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
                                     <i className="ph-bold ph-upload-simple"></i> インポート
                                 </button>
@@ -462,23 +500,23 @@
                                         <i className="ph-bold ph-download-simple"></i> 全てエクスポート
                                     </button>
                                 )}
-                                <button onClick={onCreateNew} className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center gap-2 transition-colors shadow-sm">
+                                <button onClick={() => onCreateNew('未分類')} className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center gap-2 transition-colors shadow-sm">
                                     <i className="ph-bold ph-plus"></i> 新規作成
                                 </button>
                             </div>
                         </div>
+
                         {projects.length > 0 && (
-                            <div className="flex items-center gap-2 mb-5 flex-wrap">
-                                <button onClick={() => setSelectedFolder('ALL')} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${selectedFolder === 'ALL' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-300'}`}>
-                                    すべて ({projects.length})
+                            <div className="mb-5 flex items-center gap-2">
+                                <button onClick={() => setViewMode('TREE')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${viewMode === 'TREE' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-300'}`}>
+                                    フォルダ表示
                                 </button>
-                                {folderNames.map(folder => (
-                                    <button key={folder} onClick={() => setSelectedFolder(folder)} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${selectedFolder === folder ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-300'}`}>
-                                        <i className="ph ph-folder mr-1"></i>{folder} ({folderStats[folder]})
-                                    </button>
-                                ))}
+                                <button onClick={() => setViewMode('ALL')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${viewMode === 'ALL' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-300'}`}>
+                                    全ファイル表示
+                                </button>
                             </div>
                         )}
+
                         {projects.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 text-gray-400">
                                 <div className="w-24 h-24 bg-blue-100 text-blue-300 rounded-full flex items-center justify-center mb-6 shadow-inner">
@@ -487,31 +525,48 @@
                                 <h3 className="text-xl font-bold text-gray-400 mb-2">まだまとめがありません</h3>
                                 <p className="text-sm text-gray-400 max-w-sm text-center leading-relaxed">「新規作成」ボタンから大元のテーマを作成し、質問と回答を無限に掘り下げていくツリーを作りましょう。</p>
                             </div>
-                        ) : (
+                        ) : viewMode === 'ALL' ? (
                             <div className="grid gap-4">
-                                {visibleProjects.map(project => (
-                                    <div key={project.id} onClick={() => onOpen(project.id)} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group">
-                                        <div className="p-5 flex items-start justify-between">
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2">
-                                                    <h3 className="font-bold text-gray-800 text-lg truncate group-hover:text-blue-600 transition-colors">{project.name}</h3>
-                                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100"><i className="ph ph-folder-simple mr-1"></i>{project.category || '未分類'}</span>
-                                                </div>
-                                                <div className="flex items-center gap-4 mt-2 text-sm text-gray-400">
-                                                    <span className="flex items-center gap-1"><i className="ph ph-calendar-blank"></i>{new Date(project.createdAt).toLocaleDateString('ja-JP')}</span>
-                                                    <span className="flex items-center gap-1"><i className="ph ph-clock"></i>{new Date(project.updatedAt).toLocaleDateString('ja-JP')} 更新</span>
-                                                    <span className="flex items-center gap-1"><i className="ph ph-list-dashes"></i>{project.nodeCount || 0} ノード</span>
-                                                    {(project.annotationCount || 0) > 0 && <span className="flex items-center gap-1 text-amber-500"><i className="ph-fill ph-highlighter"></i>{project.annotationCount} 注釈</span>}
-                                                </div>
-                                                {project.preview && <p className="mt-3 text-sm text-gray-500 line-clamp-2 leading-relaxed">{project.preview}</p>}
-                                            </div>
-                                            <div className="flex items-center gap-1 ml-4 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={(e) => { e.stopPropagation(); onExportSingle(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="エクスポート（JSON）"><i className="ph ph-download-simple text-lg"></i></button>
-                                                <button onClick={(e) => { e.stopPropagation(); if(confirm('\u300c'+project.name+'\u300d\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f\u3053\u306e\u64cd\u4f5c\u306f\u5143\u306b\u623b\u305b\u307e\u305b\u3093\u3002')) onDelete(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除"><i className="ph ph-trash text-lg"></i></button>
-                                            </div>
-                                        </div>
+                                {visibleProjects.map(project => <ProjectCard key={project.id} project={project} />)}
+                            </div>
+                        ) : (
+                            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm min-h-[520px] grid grid-cols-1 md:grid-cols-[260px_1fr]">
+                                <div className="border-r border-gray-200 bg-slate-50 p-3">
+                                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider px-2 mb-2">フォルダ一覧</p>
+                                    <div className="space-y-1">
+                                        <button onClick={() => setSelectedFolder('ALL')} className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors ${selectedFolder === 'ALL' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-200'}`}>
+                                            <span><i className="ph ph-folders mr-1"></i>すべて</span>
+                                            <span className="text-xs">{projects.length}</span>
+                                        </button>
+                                        {folderNames.map(folder => (
+                                            <button key={folder} onClick={() => setSelectedFolder(folder)} className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors ${selectedFolder === folder ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-200'}`}>
+                                                <span className="truncate"><i className="ph ph-folder mr-1"></i>{folder}</span>
+                                                <span className="text-xs">{folderStats[folder]}</span>
+                                            </button>
+                                        ))}
                                     </div>
-                                ))}
+                                </div>
+                                <div className="p-5">
+                                    <div className="flex items-center justify-between gap-3 mb-4">
+                                        <div>
+                                            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2"><i className="ph ph-folder-open text-blue-500"></i>{selectedFolder === 'ALL' ? 'すべてのページ' : selectedFolder}</h3>
+                                            <p className="text-xs text-gray-500 mt-1">{visibleProjects.length} 件</p>
+                                        </div>
+                                        {selectedFolder !== 'ALL' && (
+                                            <button onClick={() => onCreateInFolder(selectedFolder)} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center gap-2 transition-colors shadow-sm">
+                                                <i className="ph-bold ph-file-plus"></i> このフォルダに新規ページ
+                                            </button>
+                                        )}
+                                    </div>
+                                    {visibleProjects.length === 0 ? (
+                                        <div className="border border-dashed border-gray-300 rounded-lg p-8 text-center text-gray-400">
+                                            <p className="text-sm">このフォルダにはページがありません。</p>
+                                            {selectedFolder !== 'ALL' && <button onClick={() => onCreateInFolder(selectedFolder)} className="mt-4 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">新規ページを作成</button>}
+                                        </div>
+                                    ) : (
+                                        <div className="grid gap-4">{visibleProjects.map(project => <ProjectCard key={project.id} project={project} />)}</div>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -1350,10 +1405,19 @@
                     setAppMode('workspace'); setPanes([{ type: 'view', nodeId: 'root' }]);
                 }
             };
-            const createNewProject = () => { setCurrentProjectId(null); setCurrentProjectName(''); setCurrentProjectCategory('未分類'); setNodes({}); setAnnotations([]); resetHistory(); setAppMode('setup'); };
+            const createNewProject = (defaultCategory = '未分類') => { setCurrentProjectId(null); setCurrentProjectName(''); setCurrentProjectCategory(defaultCategory || '未分類'); setNodes({}); setAnnotations([]); resetHistory(); setAppMode('setup'); };
             const deleteProject = (id) => {
                 Storage.deleteProjectData(id);
                 setProjectList(prev => { const u = prev.filter(p => p.id !== id); Storage.saveProjectList(u); return u; });
+            };
+            const moveProjectToCategory = (id, categoryInput) => {
+                const category = (categoryInput || '').trim() || '未分類';
+                setProjectList(prev => {
+                    const u = prev.map(p => p.id === id ? { ...p, category } : p);
+                    Storage.saveProjectList(u);
+                    return u;
+                });
+                if (currentProjectId === id) setCurrentProjectCategory(category);
             };
             const goHome = () => { setAppMode('home'); setCurrentProjectId(null); setCurrentProjectName(''); setNodes({}); setAnnotations([]); setPanes([]); setTreeExpandedIds(new Set()); setSelectionMenu({ show: false }); setTooltip({ show: false }); };
 
@@ -1880,7 +1944,7 @@
                     </header>
 
                     {appMode === 'home' && (
-                        <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onDelete={deleteProject} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImport={importProjects} />
+                        <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onCreateInFolder={createNewProject} onDelete={deleteProject} onMoveToFolder={moveProjectToCategory} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImport={importProjects} />
                     )}
                     {appMode === 'setup' && (
                         <SetupScreen initialName={currentProjectName} initialCategory={currentProjectCategory} isNew={!currentProjectId} onSave={handleSetupSave}
