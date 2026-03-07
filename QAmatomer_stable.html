@@ -233,17 +233,22 @@
             async pickDirectory() {
                 return await window.showDirectoryPicker({ mode: 'readwrite' });
             },
-            sanitizeFileName(name) {
-                const base = (name || 'untitled').trim().replace(/[\/:*?"<>|]/g, '_').replace(/\s+/g, '_');
-                return (base || 'untitled') + '.json';
+            sanitizeSegment(name, fallback = 'untitled') {
+                const base = (name || fallback).trim().replace(/[\/:*?"<>|]/g, '_').replace(/\s+/g, '_');
+                return base || fallback;
             },
-            async writeProjectFile(dirHandle, projectName, data) {
+            sanitizeFileName(name) {
+                return this.sanitizeSegment(name, 'untitled') + '.json';
+            },
+            async writeProjectFile(dirHandle, folderName, projectName, data) {
+                const folder = this.sanitizeSegment(folderName || '未分類', '未分類');
+                const targetDir = await dirHandle.getDirectoryHandle(folder, { create: true });
                 const fileName = this.sanitizeFileName(projectName);
-                const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+                const fileHandle = await targetDir.getFileHandle(fileName, { create: true });
                 const writable = await fileHandle.createWritable();
                 await writable.write(JSON.stringify(data, null, 2));
                 await writable.close();
-                return fileName;
+                return { folder, fileName };
             }
         };
 
@@ -423,6 +428,7 @@
 
         // --- ホーム画面 ---
         const HomeScreen = ({ projects, onOpen, onCreateNew, onDelete, onExportSingle, onExportAll, onImport }) => {
+            const [selectedFolder, setSelectedFolder] = useState('ALL');
             const fileInputRef = useRef(null);
             const handleFileChange = (e) => {
                 const file = e.target.files[0]; if (!file) return;
@@ -430,13 +436,21 @@
                 reader.onload = (event) => { try { onImport(JSON.parse(event.target.result)); } catch(err) { alert('ファイルの読み込みに失敗しました。正しいJSONファイルを選択してください。'); } };
                 reader.readAsText(file); e.target.value = '';
             };
+            const folderStats = projects.reduce((acc, p) => {
+                const folder = p.category || '未分類';
+                acc[folder] = (acc[folder] || 0) + 1;
+                return acc;
+            }, {});
+            const folderNames = Object.keys(folderStats).sort((a, b) => a.localeCompare(b, 'ja'));
+            const visibleProjects = selectedFolder === 'ALL' ? projects : projects.filter(p => (p.category || '未分類') === selectedFolder);
+
             return (
                 <div className="flex-1 overflow-y-auto bg-gray-50">
                     <div className="max-w-4xl mx-auto px-6 py-10 animate-fade-in-up">
                         <div className="flex items-center justify-between mb-8">
                             <div>
                                 <h2 className="text-2xl font-bold text-gray-800">保存済みのQ&Aツリー</h2>
-                                <p className="text-gray-500 text-sm mt-1">{projects.length} 件のまとめ</p>
+                                <p className="text-gray-500 text-sm mt-1">{visibleProjects.length} / {projects.length} 件のまとめ</p>
                             </div>
                             <div className="flex items-center gap-3">
                                 <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
@@ -453,6 +467,18 @@
                                 </button>
                             </div>
                         </div>
+                        {projects.length > 0 && (
+                            <div className="flex items-center gap-2 mb-5 flex-wrap">
+                                <button onClick={() => setSelectedFolder('ALL')} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${selectedFolder === 'ALL' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-300'}`}>
+                                    すべて ({projects.length})
+                                </button>
+                                {folderNames.map(folder => (
+                                    <button key={folder} onClick={() => setSelectedFolder(folder)} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${selectedFolder === folder ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-300'}`}>
+                                        <i className="ph ph-folder mr-1"></i>{folder} ({folderStats[folder]})
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                         {projects.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 text-gray-400">
                                 <div className="w-24 h-24 bg-blue-100 text-blue-300 rounded-full flex items-center justify-center mb-6 shadow-inner">
@@ -463,11 +489,14 @@
                             </div>
                         ) : (
                             <div className="grid gap-4">
-                                {projects.map(project => (
+                                {visibleProjects.map(project => (
                                     <div key={project.id} onClick={() => onOpen(project.id)} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group">
                                         <div className="p-5 flex items-start justify-between">
                                             <div className="flex-1 min-w-0">
-                                                <h3 className="font-bold text-gray-800 text-lg truncate group-hover:text-blue-600 transition-colors">{project.name}</h3>
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="font-bold text-gray-800 text-lg truncate group-hover:text-blue-600 transition-colors">{project.name}</h3>
+                                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100"><i className="ph ph-folder-simple mr-1"></i>{project.category || '未分類'}</span>
+                                                </div>
                                                 <div className="flex items-center gap-4 mt-2 text-sm text-gray-400">
                                                     <span className="flex items-center gap-1"><i className="ph ph-calendar-blank"></i>{new Date(project.createdAt).toLocaleDateString('ja-JP')}</span>
                                                     <span className="flex items-center gap-1"><i className="ph ph-clock"></i>{new Date(project.updatedAt).toLocaleDateString('ja-JP')} 更新</span>
@@ -491,20 +520,30 @@
         };
 
         // --- セットアップ画面 ---
-        const SetupScreen = ({ initialName, isNew, onSave, onCancel }) => {
+        const SetupScreen = ({ initialName, initialCategory, isNew, onSave, onCancel }) => {
             const [name, setName] = useState(initialName || '');
+            const [category, setCategory] = useState(initialCategory || '未分類');
             return (
                 <div className="flex flex-col items-center justify-center h-[calc(100vh-56px)] bg-gray-50 p-6">
                     <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col animate-fade-in-up">
-                        <div className="p-8">
-                            <h1 className="text-2xl font-bold text-gray-800 mb-2">{isNew ? '新しいまとめツリーを作成' : 'まとめのタイトルを編集'}</h1>
-                            <p className="text-gray-500 text-sm mb-6">このツリー全体の主題（タイトル）を設定します。</p>
-                            <label className="block text-sm font-bold text-gray-700 mb-2">主題・タイトル <span className="text-red-500">*</span></label>
-                            <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white text-lg font-bold" placeholder="例：React Hooks の仕組みについて" autoFocus />
+                        <div className="p-8 space-y-5">
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-800 mb-2">{isNew ? '新しいまとめツリーを作成' : 'まとめの設定を編集'}</h1>
+                                <p className="text-gray-500 text-sm">タイトルとジャンルフォルダを設定します。</p>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">主題・タイトル <span className="text-red-500">*</span></label>
+                                <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white text-lg font-bold" placeholder="例：React Hooks の仕組みについて" autoFocus />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">ジャンルフォルダ</label>
+                                <input type="text" value={category} onChange={e => setCategory(e.target.value)} className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white" placeholder="例：数学 / プログラミング / 語学" />
+                                <p className="text-xs text-gray-500 mt-2">保存時にローカル側でも同名フォルダに保存されます。</p>
+                            </div>
                         </div>
                         <div className="bg-gray-50 px-8 py-5 border-t border-gray-100 flex justify-end gap-3">
                             {onCancel && <button onClick={onCancel} className="px-5 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg font-bold hover:bg-gray-50 transition-colors">キャンセル</button>}
-                            <button onClick={() => onSave(name)} disabled={!name.trim()} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm flex items-center gap-2">
+                            <button onClick={() => onSave(name, category)} disabled={!name.trim()} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm flex items-center gap-2">
                                 <i className="ph-bold ph-check"></i> {isNew ? '作成して進む' : '保存'}
                             </button>
                         </div>
@@ -1217,6 +1256,7 @@
             const [projectList, setProjectList] = useState([]);
             const [currentProjectId, setCurrentProjectId] = useState(null);
             const [currentProjectName, setCurrentProjectName] = useState('');
+            const [currentProjectCategory, setCurrentProjectCategory] = useState('未分類');
             const [nodes, setNodes] = useState({});
             const [annotations, setAnnotations] = useState([]); // テキスト選択注釈
             const [panes, setPanes] = useState([]);
@@ -1250,7 +1290,10 @@
 
             // 初期化
             useEffect(() => {
-                setProjectList(Storage.getProjectList());
+                const rawList = Storage.getProjectList();
+                const migratedList = rawList.map(p => ({ ...p, category: p.category || '未分類' }));
+                setProjectList(migratedList);
+                if (JSON.stringify(rawList) !== JSON.stringify(migratedList)) Storage.saveProjectList(migratedList);
                 const saved = Storage.getManualSaveConfig();
                 setManualSaveStatus(prev => ({ ...prev, ...saved, supported: ManualSave.isSupported() }));
                 (async () => {
@@ -1278,7 +1321,7 @@
                 Storage.saveProjectData(currentProjectId, { nodes, annotations });
                 setProjectList(prev => {
                     const updated = prev.map(p => p.id === currentProjectId ? {
-                        ...p, name: currentProjectName, updatedAt: Date.now(),
+                        ...p, name: currentProjectName, category: currentProjectCategory || '未分類', updatedAt: Date.now(),
                         nodeCount: Object.keys(nodes).length,
                         annotationCount: annotations.length,
                         preview: (nodes['root'].sections?.[0]?.content || '').substring(0, 100)
@@ -1286,7 +1329,7 @@
                     Storage.saveProjectList(updated);
                     return updated;
                 });
-            }, [nodes, annotations, currentProjectName, currentProjectId]);
+            }, [nodes, annotations, currentProjectName, currentProjectCategory, currentProjectId]);
 
             // カラムが増えたら右端へスクロール
             useEffect(() => {
@@ -1300,14 +1343,14 @@
                 const data = Storage.getProjectData(id);
                 const meta = projectList.find(p => p.id === id);
                 if (data && meta && data.nodes && data.nodes['root']) {
-                    setCurrentProjectId(id); setCurrentProjectName(meta.name);
+                    setCurrentProjectId(id); setCurrentProjectName(meta.name); setCurrentProjectCategory(meta.category || '未分類');
                     setNodes(migrateNodes(data.nodes)); setAnnotations(migrateAnnotations(data.annotations || []));
                     setTreeExpandedIds(new Set(Object.keys(data.nodes).filter(k => k !== 'root')));
                     resetHistory();
                     setAppMode('workspace'); setPanes([{ type: 'view', nodeId: 'root' }]);
                 }
             };
-            const createNewProject = () => { setCurrentProjectId(null); setCurrentProjectName(''); setNodes({}); setAnnotations([]); resetHistory(); setAppMode('setup'); };
+            const createNewProject = () => { setCurrentProjectId(null); setCurrentProjectName(''); setCurrentProjectCategory('未分類'); setNodes({}); setAnnotations([]); resetHistory(); setAppMode('setup'); };
             const deleteProject = (id) => {
                 Storage.deleteProjectData(id);
                 setProjectList(prev => { const u = prev.filter(p => p.id !== id); Storage.saveProjectList(u); return u; });
@@ -1431,19 +1474,20 @@
             };
 
             // --- ノード操作 ---
-            const handleSetupSave = (name) => {
+            const handleSetupSave = (name, categoryInput) => {
                 let id = currentProjectId;
                 const now = Date.now();
+                const category = (categoryInput || '').trim() || '未分類';
                 let newNodes = { ...nodes };
                 if (!id) {
                     id = generateId();
-                    const newProject = { id, name, createdAt: now, updatedAt: now, nodeCount: 1, annotationCount: 0, preview: '質問一覧から展開して確認してください。' };
+                    const newProject = { id, name, category, createdAt: now, updatedAt: now, nodeCount: 1, annotationCount: 0, preview: '質問一覧から展開して確認してください。' };
                     setProjectList(prev => { const u = [newProject, ...prev]; Storage.saveProjectList(u); return u; });
                     newNodes = { root: { id: 'root', parentId: null, question: name, sections: [{ id: generateId(), title: '', content: '' }], children: [] } };
                 } else {
                     newNodes['root'] = { ...newNodes['root'], question: name };
                 }
-                setCurrentProjectId(id); setCurrentProjectName(name); setNodes(newNodes);
+                setCurrentProjectId(id); setCurrentProjectName(name); setCurrentProjectCategory(category); setNodes(newNodes);
                 Storage.saveProjectData(id, { nodes: newNodes, annotations });
                 setAppMode('workspace');
                 if (panes.length === 0) setPanes([{ type: 'view', nodeId: 'root' }]);
@@ -1661,6 +1705,7 @@
                     project: {
                         id: currentProjectId,
                         name: currentProjectName || meta?.name || '名前なし',
+                        category: currentProjectCategory || meta?.category || '未分類',
                         createdAt: meta?.createdAt || Date.now(),
                         updatedAt: Date.now(),
                         nodes,
@@ -1704,12 +1749,12 @@
                 }
                 try {
                     const payload = buildCurrentProjectSaveData();
-                    const fileName = await ManualSave.writeProjectFile(saveDirHandleRef.current, currentProjectName, payload);
+                    const result = await ManualSave.writeProjectFile(saveDirHandleRef.current, currentProjectCategory || '未分類', currentProjectName, payload);
                     updateManualSaveStatus({
                         connected: true,
                         folderName: saveDirHandleRef.current.name || manualSaveStatus.folderName,
                         lastSavedAt: Date.now(),
-                        lastSavedFile: fileName,
+                        lastSavedFile: `${result.folder}/${result.fileName}`,
                         lastError: ''
                     });
                 } catch (e) {
@@ -1759,7 +1804,7 @@
                     historyRedoRef.current = [];
                     lastSnapshotRef.current = snap;
                 }
-            }, [nodes, annotations, currentProjectName, currentProjectId]);
+            }, [nodes, annotations, currentProjectName, currentProjectCategory, currentProjectId]);
 
             // --- エクスポート / インポート ---
             const doExport = (projectIds) => {
@@ -1768,7 +1813,7 @@
                     projects: projectIds.map(id => {
                         const meta = projectList.find(p => p.id === id);
                         const data = Storage.getProjectData(id);
-                        return { name: meta?.name || '名前なし', nodes: data?.nodes || {}, annotations: data?.annotations || [], createdAt: meta?.createdAt, updatedAt: meta?.updatedAt };
+                        return { name: meta?.name || '名前なし', category: meta?.category || '未分類', nodes: data?.nodes || {}, annotations: data?.annotations || [], createdAt: meta?.createdAt, updatedAt: meta?.updatedAt };
                     })
                 };
                 const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -1788,7 +1833,7 @@
                 data.projects.forEach(proj => {
                     const id = generateId(); const now = Date.now();
                     const migratedNodes = migrateNodes(proj.nodes || {});
-                    newList.unshift({ id, name: proj.name || '名前なし', createdAt: proj.createdAt || now, updatedAt: proj.updatedAt || now, nodeCount: Object.keys(migratedNodes).length, annotationCount: (proj.annotations || []).length, preview: migratedNodes?.root?.sections?.[0]?.content?.substring(0, 100) || '' });
+                    newList.unshift({ id, name: proj.name || '名前なし', category: proj.category || '未分類', createdAt: proj.createdAt || now, updatedAt: proj.updatedAt || now, nodeCount: Object.keys(migratedNodes).length, annotationCount: (proj.annotations || []).length, preview: migratedNodes?.root?.sections?.[0]?.content?.substring(0, 100) || '' });
                     Storage.saveProjectData(id, { nodes: migratedNodes, annotations: migrateAnnotations(proj.annotations || []) });
                     count++;
                 });
@@ -1811,7 +1856,8 @@
                             {appMode !== 'home' && currentProjectName && (
                                 <div className="hidden sm:flex items-center gap-2 ml-4">
                                     <i className="ph ph-caret-right text-slate-600 text-sm"></i>
-                                    <span className="text-slate-300 text-sm font-medium truncate max-w-[300px]">{currentProjectName}</span>
+                                    <span className="text-slate-300 text-sm font-medium truncate max-w-[220px]">{currentProjectName}</span>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-slate-600 text-slate-300"><i className="ph ph-folder-simple mr-1"></i>{currentProjectCategory || '未分類'}</span>
                                 </div>
                             )}
                         </div>
@@ -1837,7 +1883,7 @@
                         <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onDelete={deleteProject} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImport={importProjects} />
                     )}
                     {appMode === 'setup' && (
-                        <SetupScreen initialName={currentProjectName} isNew={!currentProjectId} onSave={handleSetupSave}
+                        <SetupScreen initialName={currentProjectName} initialCategory={currentProjectCategory} isNew={!currentProjectId} onSave={handleSetupSave}
                             onCancel={currentProjectId ? () => { setAppMode('workspace'); if (panes.length === 0) setPanes([{ type: 'view', nodeId: 'root' }]); } : (projectList.length > 0 ? goHome : null)} />
                     )}
 
