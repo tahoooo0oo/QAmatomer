@@ -196,6 +196,13 @@
             },
             saveHomeListPrefs(prefs) {
                 localStorage.setItem('annotator-qa-home-list-prefs', JSON.stringify(prefs));
+            },
+            getCustomFolders() {
+                try { return JSON.parse(localStorage.getItem('annotator-qa-custom-folders') || '[]'); }
+                catch(e) { return []; }
+            },
+            saveCustomFolders(list) {
+                localStorage.setItem('annotator-qa-custom-folders', JSON.stringify(list));
             }
         };
 
@@ -434,11 +441,11 @@
 
 
         // --- ホーム画面 ---
-        const HomeScreen = ({ projects, onOpen, onCreateNew, onCreateInFolder, onDelete, onMoveToFolder, onMoveProjectOrder, onExportSingle, onExportAll, onImport, onImportFiles, onSyncFromFolder }) => {
+        const HomeScreen = ({ projects, customFolders, onOpen, onCreateNew, onCreateInFolder, onDelete, onMoveToFolder, onMoveProjectOrder, onExportSingle, onExportAll, onImportFiles, onSyncFromFolder, onCreateFolder, onDeleteFolder }) => {
             const [selectedFolder, setSelectedFolder] = useState('ALL');
             const [viewMode, setViewMode] = useState('TREE');
             const [sortMode, setSortMode] = useState(() => Storage.getHomeListPrefs().sortMode || 'CREATED_ASC');
-            const fileInputRef = useRef(null);
+            const [newFolderName, setNewFolderName] = useState('');
             const multiFileInputRef = useRef(null);
             const folderFileInputRef = useRef(null);
             const syncFolderInputRef = useRef(null);
@@ -450,12 +457,6 @@
                 } catch (err) {
                     return null;
                 }
-            };
-            const handleFileChange = async (e) => {
-                const file = e.target.files[0]; if (!file) return;
-                const parsed = await parseJsonFile(file);
-                if (!parsed) { alert('ファイルの読み込みに失敗しました。正しいJSONファイルを選択してください。'); e.target.value = ''; return; }
-                onImport(parsed); e.target.value = '';
             };
             const handleMultiFileChange = async (e) => {
                 const files = Array.from(e.target.files || []);
@@ -484,7 +485,7 @@
                 acc[folder] = (acc[folder] || 0) + 1;
                 return acc;
             }, {});
-            const folderNames = Object.keys(folderStats).sort((a, b) => a.localeCompare(b, 'ja'));
+            const folderNames = Array.from(new Set([...Object.keys(folderStats), ...(customFolders || [])])).sort((a, b) => a.localeCompare(b, 'ja'));
             useEffect(() => {
                 Storage.saveHomeListPrefs({ sortMode });
             }, [sortMode]);
@@ -549,16 +550,12 @@
                                 <p className="text-gray-500 text-sm mt-1">{visibleProjects.length} / {projects.length} 件のまとめ</p>
                             </div>
                             <div className="flex items-center gap-3 flex-wrap justify-end">
-                                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
-                                    <i className="ph-bold ph-upload-simple"></i> インポート
-                                </button>
                                 <button onClick={() => multiFileInputRef.current?.click()} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
-                                    <i className="ph-bold ph-files"></i> 複数インポート
+                                    <i className="ph-bold ph-files"></i> インポート
                                 </button>
                                 <button onClick={() => folderFileInputRef.current?.click()} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
                                     <i className="ph-bold ph-folder-open"></i> フォルダ読込
                                 </button>
-                                <input ref={fileInputRef} type="file" accept=".json" onChange={handleFileChange} className="hidden" />
                                 <input ref={multiFileInputRef} type="file" accept=".json" multiple onChange={handleMultiFileChange} className="hidden" />
                                 <input ref={folderFileInputRef} type="file" accept=".json" multiple webkitdirectory="" directory="" onChange={handleFolderFileChange} className="hidden" />
                                 <input ref={syncFolderInputRef} type="file" accept=".json" webkitdirectory="" directory="" onChange={handleSyncFolderChange} className="hidden" />
@@ -606,7 +603,27 @@
                         ) : (
                             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm min-h-[520px] grid grid-cols-1 md:grid-cols-[260px_1fr]">
                                 <div className="border-r border-gray-200 bg-slate-50 p-3">
-                                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider px-2 mb-2">フォルダ一覧</p>
+                                    <div className="flex items-center justify-between gap-2 px-2 mb-2">
+                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">フォルダ一覧</p>
+                                        <button onClick={() => {
+                                            const name = newFolderName.trim();
+                                            if (!name) { alert('フォルダ名を入力してください。'); return; }
+                                            onCreateFolder(name);
+                                            setSelectedFolder(name);
+                                            setNewFolderName('');
+                                        }} className="w-6 h-6 rounded-md border border-slate-300 text-slate-500 hover:text-blue-600 hover:border-blue-300 hover:bg-white flex items-center justify-center" title="フォルダを追加">
+                                            <i className="ph-bold ph-plus text-xs"></i>
+                                        </button>
+                                    </div>
+                                    <div className="px-2 mb-2">
+                                        <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') {
+                                            const name = newFolderName.trim();
+                                            if (!name) { alert('フォルダ名を入力してください。'); return; }
+                                            onCreateFolder(name);
+                                            setSelectedFolder(name);
+                                            setNewFolderName('');
+                                        } }} className="w-full text-xs border border-slate-300 rounded-md px-2 py-1.5 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" placeholder="新規フォルダ名" />
+                                    </div>
                                     <div className="space-y-1">
                                         <button onClick={() => setSelectedFolder('ALL')} className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors ${selectedFolder === 'ALL' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-200'}`}>
                                             <span><i className="ph ph-folders mr-1"></i>すべて</span>
@@ -615,7 +632,7 @@
                                         {folderNames.map(folder => (
                                             <button key={folder} onClick={() => setSelectedFolder(folder)} className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors ${selectedFolder === folder ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-200'}`}>
                                                 <span className="truncate"><i className="ph ph-folder mr-1"></i>{folder}</span>
-                                                <span className="text-xs">{folderStats[folder]}</span>
+                                                <span className="text-xs">{folderStats[folder] || 0}</span>
                                             </button>
                                         ))}
                                     </div>
@@ -630,6 +647,13 @@
                                             <div className="flex items-center gap-2 flex-wrap justify-end">
                                                 <button onClick={() => syncFolderInputRef.current?.click()} className="px-3 py-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 font-medium text-sm flex items-center gap-2 transition-colors" title="選択中フォルダのページ一覧を、選択したフォルダ内JSONに合わせて更新します">
                                                     <i className="ph-bold ph-arrows-clockwise"></i> 選択フォルダ同期
+                                                </button>
+                                                <button onClick={() => {
+                                                    if (!confirm('「' + selectedFolder + '」フォルダを削除しますか？\nフォルダ内ページは「未分類」に移動します。')) return;
+                                                    onDeleteFolder(selectedFolder);
+                                                    setSelectedFolder('ALL');
+                                                }} className="px-3 py-2 text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 font-medium text-sm flex items-center gap-2 transition-colors" title="選択中フォルダを削除（ページは未分類へ移動）">
+                                                    <i className="ph-bold ph-trash"></i> フォルダ削除
                                                 </button>
                                                 <button onClick={() => onCreateInFolder(selectedFolder)} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center gap-2 transition-colors shadow-sm">
                                                     <i className="ph-bold ph-file-plus"></i> このフォルダに新規ページ
@@ -1400,6 +1424,7 @@
         const App = () => {
             const [appMode, setAppMode] = useState('home');
             const [projectList, setProjectList] = useState([]);
+            const [customFolders, setCustomFolders] = useState([]);
             const [currentProjectId, setCurrentProjectId] = useState(null);
             const [currentProjectName, setCurrentProjectName] = useState('');
             const [currentProjectCategory, setCurrentProjectCategory] = useState('未分類');
@@ -1479,6 +1504,11 @@
                 }));
                 setProjectList(migratedList);
                 if (JSON.stringify(rawList) !== JSON.stringify(migratedList)) Storage.saveProjectList(migratedList);
+                const savedCustomFolders = Storage.getCustomFolders();
+                const categoryFolders = Array.from(new Set(migratedList.map(p => (p.category || '未分類')).filter(Boolean)));
+                const mergedFolders = Array.from(new Set([...(savedCustomFolders || []), ...categoryFolders])).sort((a, b) => a.localeCompare(b, 'ja'));
+                setCustomFolders(mergedFolders);
+                if (JSON.stringify(savedCustomFolders || []) !== JSON.stringify(mergedFolders)) Storage.saveCustomFolders(mergedFolders);
                 const saved = Storage.getManualSaveConfig();
                 setManualSaveStatus(prev => ({ ...prev, ...saved, supported: ManualSave.isSupported() }));
                 (async () => {
@@ -1561,6 +1591,31 @@
                     return u;
                 });
                 if (currentProjectId === id) setCurrentProjectCategory(category);
+            };
+            const createFolder = (folderNameInput) => {
+                const folderName = (folderNameInput || '').trim();
+                if (!folderName) return;
+                setCustomFolders(prev => {
+                    if (prev.includes(folderName)) return prev;
+                    const next = [...prev, folderName].sort((a, b) => a.localeCompare(b, 'ja'));
+                    Storage.saveCustomFolders(next);
+                    return next;
+                });
+            };
+            const deleteFolder = (folderNameInput) => {
+                const folderName = (folderNameInput || '').trim();
+                if (!folderName || folderName === '未分類') return;
+                setProjectList(prev => {
+                    const next = prev.map(p => (p.category || '未分類') === folderName ? { ...p, category: '未分類', updatedAt: Date.now() } : p);
+                    Storage.saveProjectList(next);
+                    return next;
+                });
+                setCustomFolders(prev => {
+                    const next = prev.filter(f => f !== folderName);
+                    Storage.saveCustomFolders(next);
+                    return next;
+                });
+                if (currentProjectCategory === folderName) setCurrentProjectCategory('未分類');
             };
             const goHome = () => { setAppMode('home'); setCurrentProjectId(null); setCurrentProjectName(''); setNodes({}); setAnnotations([]); setPanes([]); setTreeExpandedIds(new Set()); setSelectionMenu({ show: false }); setTooltip({ show: false }); };
 
@@ -2081,7 +2136,6 @@
                 alert(count + ' 件のまとめをインポートしました。' + (invalidCount > 0 ? `（${invalidCount}件は形式不正でスキップ）` : ''));
             };
 
-            const importProjects = (data) => importProjectPayloads([data]);
             const importProjectFiles = (dataList) => importProjectPayloads(dataList);
 
             const syncImportFromFolder = (category, payloads) => {
@@ -2174,7 +2228,7 @@
                     </header>
 
                     {appMode === 'home' && (
-                        <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onCreateInFolder={createNewProject} onDelete={deleteProject} onMoveToFolder={moveProjectToCategory} onMoveProjectOrder={moveProjectOrder} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImport={importProjects} onImportFiles={importProjectFiles} onSyncFromFolder={syncImportFromFolder} />
+                        <HomeScreen projects={projectList} customFolders={customFolders} onOpen={openProject} onCreateNew={createNewProject} onCreateInFolder={createNewProject} onDelete={deleteProject} onMoveToFolder={moveProjectToCategory} onMoveProjectOrder={moveProjectOrder} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImportFiles={importProjectFiles} onSyncFromFolder={syncImportFromFolder} onCreateFolder={createFolder} onDeleteFolder={deleteFolder} />
                     )}
                     {appMode === 'setup' && (
                         <SetupScreen initialName={currentProjectName} initialCategory={currentProjectCategory} isNew={!currentProjectId} onSave={handleSetupSave}
