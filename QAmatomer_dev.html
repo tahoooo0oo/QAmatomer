@@ -770,7 +770,7 @@
         };
 
         // --- ViewPane ---
-        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, onMoveNode, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId, onOpenSearch, rootPaneWidth, onRootPaneWidthChange }) => {
+        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, onMoveNode, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId, onOpenSearch, rootPaneWidth, onStartRootPaneResize }) => {
             const [listCollapsed, setListCollapsed] = useState(!isRoot);
             const [collapsedSections, setCollapsedSections] = useState(new Set());
             const toggleSection = (sectionId) => setCollapsedSections(prev => { const next = new Set(prev); next.has(sectionId) ? next.delete(sectionId) : next.add(sectionId); return next; });
@@ -880,10 +880,9 @@
                                     <button onClick={onTreeCollapseAll} title="全折りたたみ" className="p-1 rounded hover:bg-gray-200 transition-colors text-gray-400 hover:text-gray-600">
                                         <i className="ph-bold ph-arrows-in-simple text-xs"></i>
                                     </button>
-                                    {onRootPaneWidthChange && (
+                                    {isRoot && onStartRootPaneResize && (
                                         <div className="hidden md:flex items-center gap-1 pl-2 ml-1 border-l border-gray-200">
-                                            <button onClick={() => onRootPaneWidthChange((rootPaneWidth || 300) - 20)} title="目次を狭く" className="p-1 rounded hover:bg-gray-200 transition-colors text-gray-400 hover:text-gray-600"><i className="ph-bold ph-minus text-[10px]"></i></button>
-                                            <button onClick={() => onRootPaneWidthChange((rootPaneWidth || 300) + 20)} title="目次を広く" className="p-1 rounded hover:bg-gray-200 transition-colors text-gray-400 hover:text-gray-600"><i className="ph-bold ph-plus text-[10px]"></i></button>
+                                            <span className="text-[10px] text-gray-400">境界をドラッグで幅調整</span>
                                         </div>
                                     )}
                                 </div>
@@ -937,6 +936,13 @@
                         )}
                     </div>
                     {/* 回答・解説パネル — 残りを占める、独立スクロール */}
+                    {isRoot && onStartRootPaneResize && (
+                        <div
+                            className="hidden md:block absolute top-0 right-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-blue-200/70 transition-colors"
+                            onMouseDown={onStartRootPaneResize}
+                            title="ドラッグして目次幅を調整"
+                        ></div>
+                    )}
                     {!isRoot && (
                         <div className="flex-1 overflow-y-auto bg-slate-100" onScroll={onHideSelectionMenu}>
                             {node.sections && node.sections.some(s => s.content) ? (
@@ -1398,6 +1404,9 @@
             const searchInputRef = useRef(null);
             const scrollContainerRef = useRef(null);
             const saveDirHandleRef = useRef(null);
+            const rootResizeActiveRef = useRef(false);
+            const rootResizeStartXRef = useRef(0);
+            const rootResizeStartWidthRef = useRef(300);
             const historyUndoRef = useRef([]);
             const historyRedoRef = useRef([]);
             const historySuspendRef = useRef(false);
@@ -1415,6 +1424,29 @@
             useEffect(() => {
                 localStorage.setItem('annotator-qa-root-pane-width', String(Math.min(520, Math.max(220, rootPaneWidth))));
             }, [rootPaneWidth]);
+
+            useEffect(() => {
+                const onMove = (e) => {
+                    if (!rootResizeActiveRef.current) return;
+                    const delta = e.clientX - rootResizeStartXRef.current;
+                    const next = Math.min(520, Math.max(220, rootResizeStartWidthRef.current + delta));
+                    setRootPaneWidth(next);
+                };
+                const onUp = () => { rootResizeActiveRef.current = false; };
+                window.addEventListener('mousemove', onMove);
+                window.addEventListener('mouseup', onUp);
+                return () => {
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                };
+            }, []);
+
+            const startRootPaneResize = (e) => {
+                rootResizeActiveRef.current = true;
+                rootResizeStartXRef.current = e.clientX;
+                rootResizeStartWidthRef.current = rootPaneWidth;
+                e.preventDefault();
+            };
 
             const resetHistory = () => {
                 historyUndoRef.current = [];
@@ -2255,7 +2287,7 @@
                                                 treeActiveAnnotationId={treeActiveAnnotationId}
                                                 onOpenSearch={isRootPane ? openSearch : null}
                                                 rootPaneWidth={rootPaneWidth}
-                                                onRootPaneWidthChange={(next) => setRootPaneWidth(Math.min(520, Math.max(220, next)))}
+                                                onStartRootPaneResize={isRootPane ? startRootPaneResize : null}
                                             />
                                         );
                                     }
