@@ -558,16 +558,10 @@
                                 <button onClick={() => folderFileInputRef.current?.click()} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
                                     <i className="ph-bold ph-folder-open"></i> フォルダ読込
                                 </button>
-                                <button onClick={() => {
-                                    if (selectedFolder === 'ALL') { alert('左側のフォルダ一覧から同期対象フォルダを選択してください。'); return; }
-                                    syncFolderInputRef.current?.click();
-                                }} className="px-4 py-2.5 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 font-medium text-sm flex items-center gap-2 transition-colors" title="選択中フォルダのページ一覧をJSONに合わせて更新します">
-                                    <i className="ph-bold ph-arrows-clockwise"></i> 選択フォルダ同期
-                                </button>
                                 <input ref={fileInputRef} type="file" accept=".json" onChange={handleFileChange} className="hidden" />
                                 <input ref={multiFileInputRef} type="file" accept=".json" multiple onChange={handleMultiFileChange} className="hidden" />
                                 <input ref={folderFileInputRef} type="file" accept=".json" multiple webkitdirectory="" directory="" onChange={handleFolderFileChange} className="hidden" />
-                                <input ref={syncFolderInputRef} type="file" accept=".json" multiple onChange={handleSyncFolderChange} className="hidden" />
+                                <input ref={syncFolderInputRef} type="file" accept=".json" webkitdirectory="" directory="" onChange={handleSyncFolderChange} className="hidden" />
                                 {projects.length > 0 && (
                                     <button onClick={onExportAll} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
                                         <i className="ph-bold ph-download-simple"></i> 全てエクスポート
@@ -633,9 +627,14 @@
                                             <p className="text-xs text-gray-500 mt-1">{visibleProjects.length} 件</p>
                                         </div>
                                         {selectedFolder !== 'ALL' && (
-                                            <button onClick={() => onCreateInFolder(selectedFolder)} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center gap-2 transition-colors shadow-sm">
-                                                <i className="ph-bold ph-file-plus"></i> このフォルダに新規ページ
-                                            </button>
+                                            <div className="flex items-center gap-2 flex-wrap justify-end">
+                                                <button onClick={() => syncFolderInputRef.current?.click()} className="px-3 py-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 font-medium text-sm flex items-center gap-2 transition-colors" title="選択中フォルダのページ一覧を、選択したフォルダ内JSONに合わせて更新します">
+                                                    <i className="ph-bold ph-arrows-clockwise"></i> 選択フォルダ同期
+                                                </button>
+                                                <button onClick={() => onCreateInFolder(selectedFolder)} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center gap-2 transition-colors shadow-sm">
+                                                    <i className="ph-bold ph-file-plus"></i> このフォルダに新規ページ
+                                                </button>
+                                            </div>
                                         )}
                                     </div>
                                     {visibleProjects.length === 0 ? (
