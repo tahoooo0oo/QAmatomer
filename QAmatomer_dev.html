@@ -1942,17 +1942,37 @@
             const exportSingleProject = (id) => doExport([id]);
 
             const importProjects = (data) => {
-                if (!data || (data.type !== 'annotator-qa-export' && data.type !== 'annotator-qa-export') || !Array.isArray(data.projects)) {
-                    alert('無効なファイル形式です。このツールからエクスポートしたファイルを選択してください。'); return;
+                if (!data || !data.type) {
+                    alert('無効なファイル形式です。このツールのエクスポートJSONを選択してください。'); return;
                 }
+                let importTargets = [];
+                if (data.type === 'annotator-qa-export' && Array.isArray(data.projects)) {
+                    importTargets = data.projects;
+                } else if (data.type === 'annotator-qa-project-file' && data.project) {
+                    importTargets = [data.project];
+                } else {
+                    alert('無効なファイル形式です。このツールのエクスポートJSONを選択してください。'); return;
+                }
+
                 let count = 0;
                 const newList = [...projectList];
-                data.projects.forEach(proj => {
+                importTargets.forEach(proj => {
                     const id = generateId(); const now = Date.now();
                     const migratedNodes = migrateNodes(proj.nodes || {});
+                    const migratedAnnotations = migrateAnnotations(proj.annotations || []);
                     const manualOrder = newList.reduce((max, p) => Math.max(max, Number.isFinite(p.manualOrder) ? p.manualOrder : 0), -1) + 1;
-                    newList.unshift({ id, name: proj.name || '名前なし', category: proj.category || '未分類', createdAt: proj.createdAt || now, updatedAt: proj.updatedAt || now, manualOrder, nodeCount: Object.keys(migratedNodes).length, annotationCount: (proj.annotations || []).length, preview: migratedNodes?.root?.sections?.[0]?.content?.substring(0, 100) || '' });
-                    Storage.saveProjectData(id, { nodes: migratedNodes, annotations: migrateAnnotations(proj.annotations || []) });
+                    newList.unshift({
+                        id,
+                        name: proj.name || '名前なし',
+                        category: proj.category || '未分類',
+                        createdAt: proj.createdAt || now,
+                        updatedAt: proj.updatedAt || now,
+                        manualOrder,
+                        nodeCount: Object.keys(migratedNodes).length,
+                        annotationCount: migratedAnnotations.length,
+                        preview: migratedNodes?.root?.sections?.[0]?.content?.substring(0, 100) || ''
+                    });
+                    Storage.saveProjectData(id, { nodes: migratedNodes, annotations: migratedAnnotations });
                     count++;
                 });
                 Storage.saveProjectList(newList); setProjectList(newList);
