@@ -6,11 +6,13 @@
   <title>QAmatomer Dev Launcher</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
-    .wrap { width: 300px; padding: 14px; }
+    .wrap { width: 320px; padding: 14px; }
     h1 { font-size: 14px; margin: 0 0 8px; }
     p { font-size: 12px; color: #94a3b8; margin: 0 0 12px; line-height: 1.4; }
     button { width: 100%; border: 0; border-radius: 8px; padding: 10px; font-weight: 700; cursor: pointer; }
-    #open { background: #2563eb; color: #fff; }
+    #openSide { background: #16a34a; color: #fff; }
+    #openSide:hover { background: #15803d; }
+    #open { margin-top: 8px; background: #2563eb; color: #fff; }
     #open:hover { background: #1d4ed8; }
     #options { margin-top: 8px; background: #334155; color: #e2e8f0; }
     #status { min-height: 16px; margin-top: 8px; font-size: 12px; color: #fda4af; }
@@ -19,8 +21,9 @@
 <body>
   <div class="wrap">
     <h1>QAmatomer Dev Launcher</h1>
-    <p>設定されたURLの <code>QAmatomer_dev.html</code> を新規タブで開きます。</p>
-    <button id="open">Devを開く</button>
+    <p>ChatGPTを見ながら使う場合は、まず「サイドパネルで開く」を使ってください。</p>
+    <button id="openSide">サイドパネルで開く（推奨）</button>
+    <button id="open">新規タブで開く</button>
     <button id="options">URL設定を開く</button>
     <div id="status"></div>
   </div>

@@ -12,7 +12,7 @@
 ## 推奨フロー
 
 1. 新規機能は `QAmatomer_dev.html` へ実装する。
-- 必要に応じて `chrome_extension/` のランチャーから `QAmatomer_dev.html` を起動して検証する
+- 必要に応じて `chrome_extension/` からサイドパネルで `QAmatomer_dev.html` を起動して、ChatGPTと並行検証する
 2. 動作確認（既存機能の回帰確認を含む）を行う。
 3. 安定版へ取り込むときは、差分内容を `CHANGELOG.md` に記録する。
 4. `QAmatomer_stable.html` へ反映してリリースする。
