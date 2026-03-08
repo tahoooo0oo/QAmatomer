@@ -675,21 +675,21 @@
                                         </div>
                                         {selectedFolder !== 'ALL' && (
                                             <div className="flex items-center gap-1 justify-end shrink-0">
-                                                <button onClick={() => syncFolderInputRef.current?.click()} className="group px-2.5 py-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 font-medium text-sm flex items-center gap-0.5 transition-all" title="フォルダ同期">
-                                                    <i className="ph-bold ph-arrows-clockwise text-base"></i><span className="max-w-0 opacity-0 overflow-hidden whitespace-nowrap group-hover:max-w-[110px] group-hover:opacity-100 transition-all duration-200">フォルダ同期</span>
+                                                <button onClick={() => syncFolderInputRef.current?.click()} className="group relative w-10 h-9 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 font-medium text-sm flex items-center justify-center transition-colors" title="フォルダ同期">
+                                                    <i className="ph-bold ph-arrows-clockwise text-base"></i><span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded-md bg-slate-800 text-white text-xs whitespace-nowrap opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 pointer-events-none transition-all duration-150 z-10">フォルダ同期</span>
                                                 </button>
-                                                <button onClick={() => folderImportInputRef.current?.click()} className="group px-2.5 py-2 text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 font-medium text-sm flex items-center gap-0.5 transition-all" title="このフォルダにインポート">
-                                                    <i className="ph-bold ph-upload-simple text-base"></i><span className="max-w-0 opacity-0 overflow-hidden whitespace-nowrap group-hover:max-w-[170px] group-hover:opacity-100 transition-all duration-200">このフォルダにインポート</span>
+                                                <button onClick={() => folderImportInputRef.current?.click()} className="group relative w-10 h-9 text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 font-medium text-sm flex items-center justify-center transition-colors" title="このフォルダにインポート">
+                                                    <i className="ph-bold ph-upload-simple text-base"></i><span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded-md bg-slate-800 text-white text-xs whitespace-nowrap opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 pointer-events-none transition-all duration-150 z-10">このフォルダにインポート</span>
                                                 </button>
                                                 <button onClick={() => {
                                                     if (!confirm('「' + selectedFolder + '」フォルダを削除しますか？\nフォルダ内ページは「未分類」に移動します。')) return;
                                                     onDeleteFolder(selectedFolder);
                                                     setSelectedFolder('ALL');
-                                                }} className="group px-2.5 py-2 text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 font-medium text-sm flex items-center gap-0.5 transition-all" title="フォルダ削除（ページは未分類へ移動）">
-                                                    <i className="ph-bold ph-trash text-base"></i><span className="max-w-0 opacity-0 overflow-hidden whitespace-nowrap group-hover:max-w-[110px] group-hover:opacity-100 transition-all duration-200">フォルダ削除</span>
+                                                }} className="group relative w-10 h-9 text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 font-medium text-sm flex items-center justify-center transition-colors" title="フォルダ削除（ページは未分類へ移動）">
+                                                    <i className="ph-bold ph-trash text-base"></i><span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded-md bg-slate-800 text-white text-xs whitespace-nowrap opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 pointer-events-none transition-all duration-150 z-10">フォルダ削除</span>
                                                 </button>
-                                                <button onClick={() => onCreateInFolder(selectedFolder)} className="group px-2.5 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center gap-0.5 transition-all shadow-sm" title="このフォルダに新規ページ">
-                                                    <i className="ph-bold ph-file-plus text-base"></i><span className="max-w-0 opacity-0 overflow-hidden whitespace-nowrap group-hover:max-w-[170px] group-hover:opacity-100 transition-all duration-200">このフォルダに新規ページ</span>
+                                                <button onClick={() => onCreateInFolder(selectedFolder)} className="group relative w-10 h-9 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center justify-center transition-colors shadow-sm" title="このフォルダに新規ページ">
+                                                    <i className="ph-bold ph-file-plus text-base"></i><span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 rounded-md bg-slate-800 text-white text-xs whitespace-nowrap opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 pointer-events-none transition-all duration-150 z-10">このフォルダに新規ページ</span>
                                                 </button>
                                             </div>
                                         )}
