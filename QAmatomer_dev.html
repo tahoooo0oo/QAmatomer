@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Q&Aツリー - 多重構造まとめツール</title>
+    <title>Q&Aツリー [Dev] - 多重構造まとめツール</title>
 
     <!-- React & ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
@@ -182,6 +182,87 @@
             },
             deleteProjectData(id) {
                 localStorage.removeItem('annotator-qa-project-' + id);
+            },
+            getManualSaveConfig() {
+                try { return JSON.parse(localStorage.getItem('annotator-qa-manual-save-config') || '{}'); }
+                catch(e) { return {}; }
+            },
+            saveManualSaveConfig(config) {
+                localStorage.setItem('annotator-qa-manual-save-config', JSON.stringify(config));
+            },
+            getHomeListPrefs() {
+                try { return JSON.parse(localStorage.getItem('annotator-qa-home-list-prefs') || '{}'); }
+                catch(e) { return {}; }
+            },
+            saveHomeListPrefs(prefs) {
+                localStorage.setItem('annotator-qa-home-list-prefs', JSON.stringify(prefs));
+            },
+            getCustomFolders() {
+                try { return JSON.parse(localStorage.getItem('annotator-qa-custom-folders') || '[]'); }
+                catch(e) { return []; }
+            },
+            saveCustomFolders(list) {
+                localStorage.setItem('annotator-qa-custom-folders', JSON.stringify(list));
+            }
+        };
+
+        const ManualSave = {
+            isSupported() {
+                return !!(window.showDirectoryPicker && window.indexedDB);
+            },
+            openDb() {
+                return new Promise((resolve, reject) => {
+                    const req = indexedDB.open('annotator-qa-manual-save-db', 1);
+                    req.onupgradeneeded = () => req.result.createObjectStore('kv');
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                });
+            },
+            async getDirectoryHandle() {
+                if (!this.isSupported()) return null;
+                const db = await this.openDb();
+                return await new Promise((resolve, reject) => {
+                    const tx = db.transaction('kv', 'readonly');
+                    const req = tx.objectStore('kv').get('save-dir-handle');
+                    req.onsuccess = () => resolve(req.result || null);
+                    req.onerror = () => reject(req.error);
+                });
+            },
+            async setDirectoryHandle(handle) {
+                const db = await this.openDb();
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction('kv', 'readwrite');
+                    tx.objectStore('kv').put(handle, 'save-dir-handle');
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                });
+            },
+            async requestWritePermission(handle, request = false) {
+                if (!handle) return false;
+                const opts = { mode: 'readwrite' };
+                if ((await handle.queryPermission(opts)) === 'granted') return true;
+                if (!request) return false;
+                return (await handle.requestPermission(opts)) === 'granted';
+            },
+            async pickDirectory() {
+                return await window.showDirectoryPicker({ mode: 'readwrite' });
+            },
+            sanitizeSegment(name, fallback = 'untitled') {
+                const base = (name || fallback).trim().replace(/[\/:*?"<>|]/g, '_').replace(/\s+/g, '_');
+                return base || fallback;
+            },
+            sanitizeFileName(name) {
+                return this.sanitizeSegment(name, 'untitled') + '.json';
+            },
+            async writeProjectFile(dirHandle, folderName, projectName, data) {
+                const folder = this.sanitizeSegment(folderName || '未分類', '未分類');
+                const targetDir = await dirHandle.getDirectoryHandle(folder, { create: true });
+                const fileName = this.sanitizeFileName(projectName);
+                const fileHandle = await targetDir.getFileHandle(fileName, { create: true });
+                const writable = await fileHandle.createWritable();
+                await writable.write(JSON.stringify(data, null, 2));
+                await writable.close();
+                return { folder, fileName };
             }
         };
 
@@ -360,37 +441,163 @@
 
 
         // --- ホーム画面 ---
-        const HomeScreen = ({ projects, onOpen, onCreateNew, onDelete, onExportSingle, onExportAll, onImport }) => {
-            const fileInputRef = useRef(null);
-            const handleFileChange = (e) => {
-                const file = e.target.files[0]; if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (event) => { try { onImport(JSON.parse(event.target.result)); } catch(err) { alert('ファイルの読み込みに失敗しました。正しいJSONファイルを選択してください。'); } };
-                reader.readAsText(file); e.target.value = '';
+        const HomeScreen = ({ projects, customFolders, onOpen, onCreateNew, onCreateInFolder, onDelete, onMoveToFolder, onMoveProjectOrder, onExportSingle, onExportAll, onImportFiles, onImportFilesToFolder, onSyncFromFolder, onCreateFolder, onDeleteFolder, onRenameFolder }) => {
+            const [selectedFolder, setSelectedFolder] = useState('ALL');
+            const [viewMode, setViewMode] = useState('TREE');
+            const [sortMode, setSortMode] = useState(() => Storage.getHomeListPrefs().sortMode || 'CREATED_ASC');
+            const [newFolderName, setNewFolderName] = useState('');
+            const multiFileInputRef = useRef(null);
+            const folderFileInputRef = useRef(null);
+            const syncFolderInputRef = useRef(null);
+            const folderImportInputRef = useRef(null);
+            const normalizeFolder = (category) => (category || '未分類');
+            const parseJsonFile = async (file) => {
+                try {
+                    const text = await file.text();
+                    return JSON.parse(text);
+                } catch (err) {
+                    return null;
+                }
             };
+            const handleMultiFileChange = async (e) => {
+                const files = Array.from(e.target.files || []);
+                if (files.length === 0) return;
+                const parsedList = (await Promise.all(files.map(parseJsonFile))).filter(Boolean);
+                if (parsedList.length === 0) { alert('有効なJSONファイルを読み込めませんでした。'); e.target.value = ''; return; }
+                onImportFiles(parsedList); e.target.value = '';
+            };
+            const handleFolderFileChange = async (e) => {
+                const files = Array.from(e.target.files || []).filter(f => f.name.toLowerCase().endsWith('.json'));
+                if (files.length === 0) { alert('フォルダ内にJSONファイルが見つかりませんでした。'); e.target.value = ''; return; }
+                const parsedList = (await Promise.all(files.map(parseJsonFile))).filter(Boolean);
+                if (parsedList.length === 0) { alert('有効なJSONファイルを読み込めませんでした。'); e.target.value = ''; return; }
+                onImportFiles(parsedList); e.target.value = '';
+            };
+            const handleSyncFolderChange = async (e) => {
+                const files = Array.from(e.target.files || []).filter(f => f.name.toLowerCase().endsWith('.json'));
+                if (selectedFolder === 'ALL') { alert('同期先フォルダを選択してください。'); e.target.value = ''; return; }
+                if (files.length === 0) { alert('同期に使えるJSONファイルが見つかりませんでした。'); e.target.value = ''; return; }
+                const parsedList = (await Promise.all(files.map(parseJsonFile))).filter(Boolean);
+                if (parsedList.length === 0) { alert('有効なJSONファイルを読み込めませんでした。'); e.target.value = ''; return; }
+                onSyncFromFolder(selectedFolder, parsedList); e.target.value = '';
+            };
+            const handleFolderImportChange = async (e) => {
+                const files = Array.from(e.target.files || []);
+                if (selectedFolder === 'ALL') { alert('インポート先フォルダを選択してください。'); e.target.value = ''; return; }
+                if (files.length === 0) return;
+                const parsedList = (await Promise.all(files.map(parseJsonFile))).filter(Boolean);
+                if (parsedList.length === 0) { alert('有効なJSONファイルを読み込めませんでした。'); e.target.value = ''; return; }
+                onImportFilesToFolder(selectedFolder, parsedList); e.target.value = '';
+            };
+            const folderStats = projects.reduce((acc, p) => {
+                const folder = normalizeFolder(p.category);
+                acc[folder] = (acc[folder] || 0) + 1;
+                return acc;
+            }, {});
+            const folderNames = Array.from(new Set([...Object.keys(folderStats), ...(customFolders || [])])).sort((a, b) => a.localeCompare(b, 'ja'));
+            useEffect(() => {
+                Storage.saveHomeListPrefs({ sortMode });
+            }, [sortMode]);
+            const sortProjects = (list) => {
+                const arr = [...list];
+                if (sortMode === 'CREATED_DESC') return arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                if (sortMode === 'UPDATED_DESC') return arr.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+                if (sortMode === 'NAME_ASC') return arr.sort((a, b) => (a.name || '').localeCompare((b.name || ''), 'ja'));
+                if (sortMode === 'MANUAL') return arr.sort((a, b) => (a.manualOrder ?? 0) - (b.manualOrder ?? 0));
+                return arr.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+            };
+            useEffect(() => {
+                if (selectedFolder !== 'ALL' && !folderNames.includes(selectedFolder)) {
+                    setSelectedFolder(folderNames[0] || 'ALL');
+                }
+            }, [selectedFolder, folderNames]);
+            const visibleProjects = selectedFolder === 'ALL'
+                ? sortProjects(projects)
+                : sortProjects(projects.filter(p => normalizeFolder(p.category) === selectedFolder));
+
+            const ProjectCard = ({ project }) => (
+                <div key={project.id} onClick={() => onOpen(project.id)} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group">
+                    <div className="p-5 flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                                <h3 className="font-bold text-gray-800 text-lg truncate group-hover:text-blue-600 transition-colors">{project.name}</h3>
+                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100"><i className="ph ph-folder-simple mr-1"></i>{normalizeFolder(project.category)}</span>
+                            </div>
+                            <div className="flex items-center gap-4 mt-2 text-sm text-gray-400 flex-wrap">
+                                <span className="flex items-center gap-1"><i className="ph ph-calendar-blank"></i>{new Date(project.createdAt).toLocaleDateString('ja-JP')}</span>
+                                <span className="flex items-center gap-1"><i className="ph ph-clock"></i>{new Date(project.updatedAt).toLocaleDateString('ja-JP')} 更新</span>
+                                <span className="flex items-center gap-1"><i className="ph ph-list-dashes"></i>{project.nodeCount || 0} ノード</span>
+                                {(project.annotationCount || 0) > 0 && <span className="flex items-center gap-1 text-amber-500"><i className="ph-fill ph-highlighter"></i>{project.annotationCount} 注釈</span>}
+                            </div>
+                            {project.preview && <p className="mt-3 text-sm text-gray-500 line-clamp-2 leading-relaxed">{project.preview}</p>}
+                        </div>
+                        <div className="flex flex-col items-end gap-2 ml-2 shrink-0" onClick={e => e.stopPropagation()}>
+                            <select value={normalizeFolder(project.category)} onChange={(e) => onMoveToFolder(project.id, e.target.value)} className="text-xs border border-gray-300 rounded-md px-2 py-1 bg-white text-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" title="フォルダを変更">
+                                {folderNames.map(folder => <option key={folder} value={folder}>{folder}</option>)}
+                            </select>
+                            <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
+                                {sortMode === 'MANUAL' && (
+                                    <>
+                                        <button onClick={() => onMoveProjectOrder(project.id, -1)} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-slate-700 hover:bg-slate-100 transition-colors" title="上へ"><i className="ph ph-arrow-up text-lg"></i></button>
+                                        <button onClick={() => onMoveProjectOrder(project.id, 1)} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-slate-700 hover:bg-slate-100 transition-colors" title="下へ"><i className="ph ph-arrow-down text-lg"></i></button>
+                                    </>
+                                )}
+                                <button onClick={() => onExportSingle(project.id)} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="エクスポート（JSON）"><i className="ph ph-download-simple text-lg"></i></button>
+                                <button onClick={() => { if(confirm('「'+project.name+'」を削除しますか？この操作は元に戻せません。')) onDelete(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除"><i className="ph ph-trash text-lg"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+
             return (
                 <div className="flex-1 overflow-y-auto bg-gray-50">
-                    <div className="max-w-4xl mx-auto px-6 py-10 animate-fade-in-up">
-                        <div className="flex items-center justify-between mb-8">
+                    <div className="max-w-6xl mx-auto px-6 py-10 animate-fade-in-up">
+                        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
                             <div>
                                 <h2 className="text-2xl font-bold text-gray-800">保存済みのQ&Aツリー</h2>
-                                <p className="text-gray-500 text-sm mt-1">{projects.length} 件のまとめ</p>
+                                <p className="text-gray-500 text-sm mt-1">{visibleProjects.length} / {projects.length} 件のまとめ</p>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
-                                    <i className="ph-bold ph-upload-simple"></i> インポート
+                            <div className="flex items-center gap-3 flex-wrap justify-end">
+                                <button onClick={() => multiFileInputRef.current?.click()} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
+                                    <i className="ph-bold ph-files"></i> インポート
                                 </button>
-                                <input ref={fileInputRef} type="file" accept=".json" onChange={handleFileChange} className="hidden" />
+                                <button onClick={() => folderFileInputRef.current?.click()} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
+                                    <i className="ph-bold ph-folder-open"></i> フォルダ読込
+                                </button>
+                                <input ref={multiFileInputRef} type="file" accept=".json" multiple onChange={handleMultiFileChange} className="hidden" />
+                                <input ref={folderFileInputRef} type="file" accept=".json" multiple webkitdirectory="" directory="" onChange={handleFolderFileChange} className="hidden" />
+                                <input ref={syncFolderInputRef} type="file" accept=".json" webkitdirectory="" directory="" onChange={handleSyncFolderChange} className="hidden" />
+                                <input ref={folderImportInputRef} type="file" accept=".json" multiple onChange={handleFolderImportChange} className="hidden" />
                                 {projects.length > 0 && (
                                     <button onClick={onExportAll} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
                                         <i className="ph-bold ph-download-simple"></i> 全てエクスポート
                                     </button>
                                 )}
-                                <button onClick={onCreateNew} className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center gap-2 transition-colors shadow-sm">
+                                <button onClick={() => onCreateNew('未分類')} className="px-5 py-2.5 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center gap-2 transition-colors shadow-sm">
                                     <i className="ph-bold ph-plus"></i> 新規作成
                                 </button>
                             </div>
                         </div>
+
+                        {projects.length > 0 && (
+                            <div className="mb-5 flex flex-wrap items-center gap-2">
+                                <select value={sortMode} onChange={(e) => setSortMode(e.target.value)} className="px-3 py-1.5 rounded-lg text-xs font-bold border border-gray-300 bg-white text-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" title="並び順">
+                                    <option value="CREATED_ASC">作成日（古い順）</option>
+                                    <option value="CREATED_DESC">作成日（新しい順）</option>
+                                    <option value="UPDATED_DESC">最終更新順</option>
+                                    <option value="NAME_ASC">名前（五十音順）</option>
+                                    <option value="MANUAL">手動並び替え</option>
+                                </select>
+                                <button onClick={() => setViewMode('TREE')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${viewMode === 'TREE' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-300'}`}>
+                                    フォルダ表示
+                                </button>
+                                <button onClick={() => setViewMode('ALL')} className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${viewMode === 'ALL' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-300 hover:border-blue-300'}`}>
+                                    全ファイル表示
+                                </button>
+                            </div>
+                        )}
+
                         {projects.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 text-gray-400">
                                 <div className="w-24 h-24 bg-blue-100 text-blue-300 rounded-full flex items-center justify-center mb-6 shadow-inner">
@@ -399,28 +606,103 @@
                                 <h3 className="text-xl font-bold text-gray-400 mb-2">まだまとめがありません</h3>
                                 <p className="text-sm text-gray-400 max-w-sm text-center leading-relaxed">「新規作成」ボタンから大元のテーマを作成し、質問と回答を無限に掘り下げていくツリーを作りましょう。</p>
                             </div>
-                        ) : (
+                        ) : viewMode === 'ALL' ? (
                             <div className="grid gap-4">
-                                {projects.map(project => (
-                                    <div key={project.id} onClick={() => onOpen(project.id)} className="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group">
-                                        <div className="p-5 flex items-start justify-between">
-                                            <div className="flex-1 min-w-0">
-                                                <h3 className="font-bold text-gray-800 text-lg truncate group-hover:text-blue-600 transition-colors">{project.name}</h3>
-                                                <div className="flex items-center gap-4 mt-2 text-sm text-gray-400">
-                                                    <span className="flex items-center gap-1"><i className="ph ph-calendar-blank"></i>{new Date(project.createdAt).toLocaleDateString('ja-JP')}</span>
-                                                    <span className="flex items-center gap-1"><i className="ph ph-clock"></i>{new Date(project.updatedAt).toLocaleDateString('ja-JP')} 更新</span>
-                                                    <span className="flex items-center gap-1"><i className="ph ph-list-dashes"></i>{project.nodeCount || 0} ノード</span>
-                                                    {(project.annotationCount || 0) > 0 && <span className="flex items-center gap-1 text-amber-500"><i className="ph-fill ph-highlighter"></i>{project.annotationCount} 注釈</span>}
-                                                </div>
-                                                {project.preview && <p className="mt-3 text-sm text-gray-500 line-clamp-2 leading-relaxed">{project.preview}</p>}
-                                            </div>
-                                            <div className="flex items-center gap-1 ml-4 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={(e) => { e.stopPropagation(); onExportSingle(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="エクスポート（JSON）"><i className="ph ph-download-simple text-lg"></i></button>
-                                                <button onClick={(e) => { e.stopPropagation(); if(confirm('\u300c'+project.name+'\u300d\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f\u3053\u306e\u64cd\u4f5c\u306f\u5143\u306b\u623b\u305b\u307e\u305b\u3093\u3002')) onDelete(project.id); }} className="w-9 h-9 flex items-center justify-center rounded-full text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors" title="削除"><i className="ph ph-trash text-lg"></i></button>
-                                            </div>
-                                        </div>
+                                {visibleProjects.map(project => <ProjectCard key={project.id} project={project} />)}
+                            </div>
+                        ) : (
+                            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm min-h-[520px] grid grid-cols-1 md:grid-cols-[260px_1fr]">
+                                <div className="border-r border-gray-200 bg-slate-50 p-3">
+                                    <div className="flex items-center justify-between gap-2 px-2 mb-2">
+                                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">フォルダ一覧</p>
+                                        <button onClick={() => {
+                                            const name = newFolderName.trim();
+                                            if (!name) { alert('フォルダ名を入力してください。'); return; }
+                                            onCreateFolder(name);
+                                            setSelectedFolder(name);
+                                            setNewFolderName('');
+                                        }} className="w-6 h-6 rounded-md border border-slate-300 text-slate-500 hover:text-blue-600 hover:border-blue-300 hover:bg-white flex items-center justify-center" title="フォルダを追加">
+                                            <i className="ph-bold ph-plus text-xs"></i>
+                                        </button>
                                     </div>
-                                ))}
+                                    <div className="px-2 mb-2">
+                                        <input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') {
+                                            const name = newFolderName.trim();
+                                            if (!name) { alert('フォルダ名を入力してください。'); return; }
+                                            onCreateFolder(name);
+                                            setSelectedFolder(name);
+                                            setNewFolderName('');
+                                        } }} className="w-full text-xs border border-slate-300 rounded-md px-2 py-1.5 bg-white text-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none" placeholder="新規フォルダ名" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <button onClick={() => setSelectedFolder('ALL')} className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors ${selectedFolder === 'ALL' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-200'}`}>
+                                            <span><i className="ph ph-folders mr-1"></i>すべて</span>
+                                            <span className="text-xs">{projects.length}</span>
+                                        </button>
+                                        {folderNames.map(folder => (
+                                            <button key={folder} onClick={() => setSelectedFolder(folder)} className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors ${selectedFolder === folder ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-200'}`}>
+                                                <span className="truncate"><i className="ph ph-folder mr-1"></i>{folder}</span>
+                                                <span className="text-xs">{folderStats[folder] || 0}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="p-5">
+                                    <div className="flex items-center justify-between gap-2 mb-4">
+                                        <div className="min-w-0 flex-1">
+                                            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2 min-w-0">
+                                                <i className="ph ph-folder-open text-blue-500"></i>
+                                                <span onContextMenu={(e) => {
+                                                    if (selectedFolder === 'ALL') return;
+                                                    e.preventDefault();
+                                                    const next = prompt('フォルダ名を変更', selectedFolder);
+                                                    if (!next || next.trim() === selectedFolder) return;
+                                                    onRenameFolder(selectedFolder, next.trim());
+                                                    setSelectedFolder(next.trim());
+                                                }} className={`${selectedFolder === 'ALL' ? '' : 'cursor-text'} min-w-0 truncate`} title={selectedFolder === 'ALL' ? '' : '右クリックでフォルダ名変更'}>{selectedFolder === 'ALL' ? 'すべてのページ' : selectedFolder}</span>
+                                                {selectedFolder !== 'ALL' && (
+                                                    <button onClick={() => {
+                                                        const next = prompt('フォルダ名を変更', selectedFolder);
+                                                        if (!next || next.trim() === selectedFolder) return;
+                                                        onRenameFolder(selectedFolder, next.trim());
+                                                        setSelectedFolder(next.trim());
+                                                    }} className="w-6 h-6 rounded-md border border-slate-300 text-slate-500 hover:text-blue-600 hover:border-blue-300 hover:bg-white flex items-center justify-center" title="フォルダ名を変更">
+                                                        <i className="ph-bold ph-pencil-simple text-xs"></i>
+                                                    </button>
+                                                )}
+                                            </h3>
+                                            <p className="text-xs text-gray-500 mt-1">{visibleProjects.length} 件</p>
+                                        </div>
+                                        {selectedFolder !== 'ALL' && (
+                                            <div className="flex items-center gap-1 justify-end shrink-0">
+                                                <button onClick={() => syncFolderInputRef.current?.click()} className="group px-2.5 py-2 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 font-medium text-sm flex items-center gap-0.5 transition-all" title="フォルダ同期">
+                                                    <i className="ph-bold ph-arrows-clockwise text-base"></i><span className="max-w-0 opacity-0 overflow-hidden whitespace-nowrap group-hover:max-w-[110px] group-hover:opacity-100 transition-all duration-200">フォルダ同期</span>
+                                                </button>
+                                                <button onClick={() => folderImportInputRef.current?.click()} className="group px-2.5 py-2 text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 font-medium text-sm flex items-center gap-0.5 transition-all" title="このフォルダにインポート">
+                                                    <i className="ph-bold ph-upload-simple text-base"></i><span className="max-w-0 opacity-0 overflow-hidden whitespace-nowrap group-hover:max-w-[170px] group-hover:opacity-100 transition-all duration-200">このフォルダにインポート</span>
+                                                </button>
+                                                <button onClick={() => {
+                                                    if (!confirm('「' + selectedFolder + '」フォルダを削除しますか？\nフォルダ内ページは「未分類」に移動します。')) return;
+                                                    onDeleteFolder(selectedFolder);
+                                                    setSelectedFolder('ALL');
+                                                }} className="group px-2.5 py-2 text-rose-700 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 font-medium text-sm flex items-center gap-0.5 transition-all" title="フォルダ削除（ページは未分類へ移動）">
+                                                    <i className="ph-bold ph-trash text-base"></i><span className="max-w-0 opacity-0 overflow-hidden whitespace-nowrap group-hover:max-w-[110px] group-hover:opacity-100 transition-all duration-200">フォルダ削除</span>
+                                                </button>
+                                                <button onClick={() => onCreateInFolder(selectedFolder)} className="group px-2.5 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center gap-0.5 transition-all shadow-sm" title="このフォルダに新規ページ">
+                                                    <i className="ph-bold ph-file-plus text-base"></i><span className="max-w-0 opacity-0 overflow-hidden whitespace-nowrap group-hover:max-w-[170px] group-hover:opacity-100 transition-all duration-200">このフォルダに新規ページ</span>
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {visibleProjects.length === 0 ? (
+                                        <div className="border border-dashed border-gray-300 rounded-lg p-8 text-center text-gray-400">
+                                            <p className="text-sm">このフォルダにはページがありません。</p>
+                                            {selectedFolder !== 'ALL' && <button onClick={() => onCreateInFolder(selectedFolder)} className="mt-4 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">新規ページを作成</button>}
+                                        </div>
+                                    ) : (
+                                        <div className="grid gap-4">{visibleProjects.map(project => <ProjectCard key={project.id} project={project} />)}</div>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -429,20 +711,30 @@
         };
 
         // --- セットアップ画面 ---
-        const SetupScreen = ({ initialName, isNew, onSave, onCancel }) => {
+        const SetupScreen = ({ initialName, initialCategory, isNew, onSave, onCancel }) => {
             const [name, setName] = useState(initialName || '');
+            const [category, setCategory] = useState(initialCategory || '未分類');
             return (
                 <div className="flex flex-col items-center justify-center h-[calc(100vh-56px)] bg-gray-50 p-6">
                     <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col animate-fade-in-up">
-                        <div className="p-8">
-                            <h1 className="text-2xl font-bold text-gray-800 mb-2">{isNew ? '新しいまとめツリーを作成' : 'まとめのタイトルを編集'}</h1>
-                            <p className="text-gray-500 text-sm mb-6">このツリー全体の主題（タイトル）を設定します。</p>
-                            <label className="block text-sm font-bold text-gray-700 mb-2">主題・タイトル <span className="text-red-500">*</span></label>
-                            <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white text-lg font-bold" placeholder="例：React Hooks の仕組みについて" autoFocus />
+                        <div className="p-8 space-y-5">
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-800 mb-2">{isNew ? '新しいまとめツリーを作成' : 'まとめの設定を編集'}</h1>
+                                <p className="text-gray-500 text-sm">タイトルとジャンルフォルダを設定します。</p>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">主題・タイトル <span className="text-red-500">*</span></label>
+                                <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white text-lg font-bold" placeholder="例：React Hooks の仕組みについて" autoFocus />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">ジャンルフォルダ</label>
+                                <input type="text" value={category} onChange={e => setCategory(e.target.value)} className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white" placeholder="例：数学 / プログラミング / 語学" />
+                                <p className="text-xs text-gray-500 mt-2">保存時にローカル側でも同名フォルダに保存されます。</p>
+                            </div>
                         </div>
                         <div className="bg-gray-50 px-8 py-5 border-t border-gray-100 flex justify-end gap-3">
                             {onCancel && <button onClick={onCancel} className="px-5 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg font-bold hover:bg-gray-50 transition-colors">キャンセル</button>}
-                            <button onClick={() => onSave(name)} disabled={!name.trim()} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm flex items-center gap-2">
+                            <button onClick={() => onSave(name, category)} disabled={!name.trim()} className="px-6 py-2.5 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm flex items-center gap-2">
                                 <i className="ph-bold ph-check"></i> {isNew ? '作成して進む' : '保存'}
                             </button>
                         </div>
@@ -547,7 +839,7 @@
         };
 
         // --- ViewPane ---
-        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, onMoveNode, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId, onOpenSearch }) => {
+        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, onMoveNode, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId, onOpenSearch, rootPaneWidth, onStartRootPaneResize }) => {
             const [listCollapsed, setListCollapsed] = useState(!isRoot);
             const [collapsedSections, setCollapsedSections] = useState(new Set());
             const toggleSection = (sectionId) => setCollapsedSections(prev => { const next = new Set(prev); next.has(sectionId) ? next.delete(sectionId) : next.add(sectionId); return next; });
@@ -618,7 +910,7 @@
             };
 
             return (
-                <div className={`flex flex-col h-full bg-white border-r border-gray-200 shrink-0 w-[90vw] md:w-[50vw] lg:w-[45vw] xl:w-[40vw] relative z-0 shadow-[4px_0_24px_rgba(0,0,0,0.06)] animate-slide-in-right ${isRoot ? 'bg-slate-50' : ''}`}>
+                <div className={`flex flex-col h-full bg-white border-r border-gray-200 shrink-0 relative z-0 shadow-[4px_0_24px_rgba(0,0,0,0.06)] animate-slide-in-right ${isRoot ? 'bg-slate-50 w-[85vw] md:w-auto' : 'w-[90vw] md:w-[50vw] lg:w-[45vw] xl:w-[40vw]'}`} style={isRoot ? { width: `${Math.min(520, Math.max(220, rootPaneWidth || 300))}px` } : undefined}>
                     {breadcrumb.length > 0 && <BreadcrumbTrail path={breadcrumb} />}
                     <div className="p-4 border-b border-gray-100 bg-white flex items-start justify-between shrink-0 shadow-sm z-10">
                         <div className="flex items-start gap-3 overflow-hidden flex-1">
@@ -657,6 +949,11 @@
                                     <button onClick={onTreeCollapseAll} title="全折りたたみ" className="p-1 rounded hover:bg-gray-200 transition-colors text-gray-400 hover:text-gray-600">
                                         <i className="ph-bold ph-arrows-in-simple text-xs"></i>
                                     </button>
+                                    {isRoot && onStartRootPaneResize && (
+                                        <div className="hidden md:flex items-center gap-1 pl-2 ml-1 border-l border-gray-200">
+                                            <span className="text-[10px] text-gray-400">境界をドラッグで幅調整</span>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -708,6 +1005,13 @@
                         )}
                     </div>
                     {/* 回答・解説パネル — 残りを占める、独立スクロール */}
+                    {isRoot && onStartRootPaneResize && (
+                        <div
+                            className="hidden md:block absolute top-0 right-0 h-full w-1.5 cursor-col-resize bg-transparent hover:bg-blue-200/70 transition-colors"
+                            onMouseDown={onStartRootPaneResize}
+                            title="ドラッグして目次幅を調整"
+                        ></div>
+                    )}
                     {!isRoot && (
                         <div className="flex-1 overflow-y-auto bg-slate-100" onScroll={onHideSelectionMenu}>
                             {node.sections && node.sections.some(s => s.content) ? (
@@ -1153,8 +1457,10 @@
         const App = () => {
             const [appMode, setAppMode] = useState('home');
             const [projectList, setProjectList] = useState([]);
+            const [customFolders, setCustomFolders] = useState([]);
             const [currentProjectId, setCurrentProjectId] = useState(null);
             const [currentProjectName, setCurrentProjectName] = useState('');
+            const [currentProjectCategory, setCurrentProjectCategory] = useState('未分類');
             const [nodes, setNodes] = useState({});
             const [annotations, setAnnotations] = useState([]); // テキスト選択注釈
             const [panes, setPanes] = useState([]);
@@ -1164,11 +1470,98 @@
             const [searchOpen, setSearchOpen] = useState(false);
             const [searchQuery, setSearchQuery] = useState('');
             const [searchResults, setSearchResults] = useState([]);
+            const [rootPaneWidth, setRootPaneWidth] = useState(() => { const v = parseInt(localStorage.getItem('annotator-qa-root-pane-width') || '', 10); return Number.isFinite(v) ? Math.min(520, Math.max(220, v)) : 300; });
             const searchInputRef = useRef(null);
             const scrollContainerRef = useRef(null);
+            const saveDirHandleRef = useRef(null);
+            const rootResizeActiveRef = useRef(false);
+            const rootResizeStartXRef = useRef(0);
+            const rootResizeStartWidthRef = useRef(300);
+            const historyUndoRef = useRef([]);
+            const historyRedoRef = useRef([]);
+            const historySuspendRef = useRef(false);
+            const lastSnapshotRef = useRef('');
+            const [manualSaveStatus, setManualSaveStatus] = useState({
+                supported: ManualSave.isSupported(),
+                connected: false,
+                folderName: '',
+                lastSavedAt: null,
+                lastSavedFile: '',
+                lastError: ''
+            });
+
+
+            useEffect(() => {
+                localStorage.setItem('annotator-qa-root-pane-width', String(Math.min(520, Math.max(220, rootPaneWidth))));
+            }, [rootPaneWidth]);
+
+            useEffect(() => {
+                const onMove = (e) => {
+                    if (!rootResizeActiveRef.current) return;
+                    const delta = e.clientX - rootResizeStartXRef.current;
+                    const next = Math.min(520, Math.max(220, rootResizeStartWidthRef.current + delta));
+                    setRootPaneWidth(next);
+                };
+                const onUp = () => { rootResizeActiveRef.current = false; };
+                window.addEventListener('mousemove', onMove);
+                window.addEventListener('mouseup', onUp);
+                return () => {
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                };
+            }, []);
+
+            const startRootPaneResize = (e) => {
+                rootResizeActiveRef.current = true;
+                rootResizeStartXRef.current = e.clientX;
+                rootResizeStartWidthRef.current = rootPaneWidth;
+                e.preventDefault();
+            };
+
+            const resetHistory = () => {
+                historyUndoRef.current = [];
+                historyRedoRef.current = [];
+                lastSnapshotRef.current = '';
+            };
 
             // 初期化
-            useEffect(() => { setProjectList(Storage.getProjectList()); }, []);
+            useEffect(() => {
+                const rawList = Storage.getProjectList();
+                const now = Date.now();
+                const migratedList = rawList.map((p, idx) => ({
+                    ...p,
+                    category: p.category || '未分類',
+                    createdAt: p.createdAt || p.updatedAt || (now + idx),
+                    updatedAt: p.updatedAt || p.createdAt || (now + idx),
+                    manualOrder: Number.isFinite(p.manualOrder) ? p.manualOrder : idx
+                }));
+                setProjectList(migratedList);
+                if (JSON.stringify(rawList) !== JSON.stringify(migratedList)) Storage.saveProjectList(migratedList);
+                const savedCustomFolders = Storage.getCustomFolders();
+                const categoryFolders = Array.from(new Set(migratedList.map(p => (p.category || '未分類')).filter(Boolean)));
+                const mergedFolders = Array.from(new Set([...(savedCustomFolders || []), ...categoryFolders])).sort((a, b) => a.localeCompare(b, 'ja'));
+                setCustomFolders(mergedFolders);
+                if (JSON.stringify(savedCustomFolders || []) !== JSON.stringify(mergedFolders)) Storage.saveCustomFolders(mergedFolders);
+                const saved = Storage.getManualSaveConfig();
+                setManualSaveStatus(prev => ({ ...prev, ...saved, supported: ManualSave.isSupported() }));
+                (async () => {
+                    if (!ManualSave.isSupported()) return;
+                    try {
+                        const handle = await ManualSave.getDirectoryHandle();
+                        if (!handle) return;
+                        saveDirHandleRef.current = handle;
+                        const granted = await ManualSave.requestWritePermission(handle, false);
+                        setManualSaveStatus(prev => ({
+                            ...prev,
+                            connected: granted,
+                            folderName: handle.name || prev.folderName || '',
+                            lastError: granted ? '' : '保存フォルダの再接続が必要です'
+                        }));
+                    } catch (e) {
+                        setManualSaveStatus(prev => ({ ...prev, connected: false, lastError: '保存設定の初期化に失敗しました' }));
+                    }
+                })();
+            }, []);
 
             // 自動保存
             useEffect(() => {
@@ -1176,7 +1569,7 @@
                 Storage.saveProjectData(currentProjectId, { nodes, annotations });
                 setProjectList(prev => {
                     const updated = prev.map(p => p.id === currentProjectId ? {
-                        ...p, name: currentProjectName, updatedAt: Date.now(),
+                        ...p, name: currentProjectName, category: currentProjectCategory || '未分類', updatedAt: Date.now(),
                         nodeCount: Object.keys(nodes).length,
                         annotationCount: annotations.length,
                         preview: (nodes['root'].sections?.[0]?.content || '').substring(0, 100)
@@ -1184,7 +1577,7 @@
                     Storage.saveProjectList(updated);
                     return updated;
                 });
-            }, [nodes, annotations, currentProjectName, currentProjectId]);
+            }, [nodes, annotations, currentProjectName, currentProjectCategory, currentProjectId]);
 
             // カラムが増えたら右端へスクロール
             useEffect(() => {
@@ -1198,16 +1591,82 @@
                 const data = Storage.getProjectData(id);
                 const meta = projectList.find(p => p.id === id);
                 if (data && meta && data.nodes && data.nodes['root']) {
-                    setCurrentProjectId(id); setCurrentProjectName(meta.name);
+                    setCurrentProjectId(id); setCurrentProjectName(meta.name); setCurrentProjectCategory(meta.category || '未分類');
                     setNodes(migrateNodes(data.nodes)); setAnnotations(migrateAnnotations(data.annotations || []));
                     setTreeExpandedIds(new Set(Object.keys(data.nodes).filter(k => k !== 'root')));
+                    resetHistory();
                     setAppMode('workspace'); setPanes([{ type: 'view', nodeId: 'root' }]);
                 }
             };
-            const createNewProject = () => { setCurrentProjectId(null); setCurrentProjectName(''); setNodes({}); setAnnotations([]); setAppMode('setup'); };
+            const createNewProject = (defaultCategory = '未分類') => { setCurrentProjectId(null); setCurrentProjectName(''); setCurrentProjectCategory(defaultCategory || '未分類'); setNodes({}); setAnnotations([]); resetHistory(); setAppMode('setup'); };
             const deleteProject = (id) => {
                 Storage.deleteProjectData(id);
                 setProjectList(prev => { const u = prev.filter(p => p.id !== id); Storage.saveProjectList(u); return u; });
+            };
+            const moveProjectOrder = (id, direction) => {
+                setProjectList(prev => {
+                    const ordered = [...prev].sort((a, b) => (a.manualOrder ?? 0) - (b.manualOrder ?? 0));
+                    const idx = ordered.findIndex(p => p.id === id);
+                    if (idx < 0) return prev;
+                    const nextIdx = idx + direction;
+                    if (nextIdx < 0 || nextIdx >= ordered.length) return prev;
+                    [ordered[idx], ordered[nextIdx]] = [ordered[nextIdx], ordered[idx]];
+                    const mapped = ordered.map((p, order) => ({ ...p, manualOrder: order }));
+                    Storage.saveProjectList(mapped);
+                    return mapped;
+                });
+            };
+            const moveProjectToCategory = (id, categoryInput) => {
+                const category = (categoryInput || '').trim() || '未分類';
+                setProjectList(prev => {
+                    const u = prev.map(p => p.id === id ? { ...p, category } : p);
+                    Storage.saveProjectList(u);
+                    return u;
+                });
+                if (currentProjectId === id) setCurrentProjectCategory(category);
+            };
+            const createFolder = (folderNameInput) => {
+                const folderName = (folderNameInput || '').trim();
+                if (!folderName) return;
+                setCustomFolders(prev => {
+                    if (prev.includes(folderName)) return prev;
+                    const next = [...prev, folderName].sort((a, b) => a.localeCompare(b, 'ja'));
+                    Storage.saveCustomFolders(next);
+                    return next;
+                });
+            };
+            const deleteFolder = (folderNameInput) => {
+                const folderName = (folderNameInput || '').trim();
+                if (!folderName || folderName === '未分類') return;
+                setProjectList(prev => {
+                    const next = prev.map(p => (p.category || '未分類') === folderName ? { ...p, category: '未分類', updatedAt: Date.now() } : p);
+                    Storage.saveProjectList(next);
+                    return next;
+                });
+                setCustomFolders(prev => {
+                    const next = prev.filter(f => f !== folderName);
+                    Storage.saveCustomFolders(next);
+                    return next;
+                });
+                if (currentProjectCategory === folderName) setCurrentProjectCategory('未分類');
+            };
+            const renameFolder = (fromNameInput, toNameInput) => {
+                const fromName = (fromNameInput || '').trim();
+                const toName = (toNameInput || '').trim();
+                if (!fromName || !toName || fromName === toName) return;
+                setProjectList(prev => {
+                    const next = prev.map(p => (p.category || '未分類') === fromName ? { ...p, category: toName, updatedAt: Date.now() } : p);
+                    Storage.saveProjectList(next);
+                    return next;
+                });
+                setCustomFolders(prev => {
+                    const base = prev.filter(f => f !== fromName);
+                    const next = base.includes(toName) ? base : [...base, toName];
+                    next.sort((a, b) => a.localeCompare(b, 'ja'));
+                    Storage.saveCustomFolders(next);
+                    return next;
+                });
+                if (currentProjectCategory === fromName) setCurrentProjectCategory(toName);
             };
             const goHome = () => { setAppMode('home'); setCurrentProjectId(null); setCurrentProjectName(''); setNodes({}); setAnnotations([]); setPanes([]); setTreeExpandedIds(new Set()); setSelectionMenu({ show: false }); setTooltip({ show: false }); };
 
@@ -1267,18 +1726,33 @@
                 setSearchResults(deduped);
             };
 
-            // Keyboard shortcut Ctrl+K / Cmd+K
+            // Keyboard shortcut (検索/保存/Undo/Redo)
             useEffect(() => {
                 const handler = (e) => {
-                    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                    const isMod = e.ctrlKey || e.metaKey;
+                    const target = e.target;
+                    const isEditable = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+                    if (isMod && e.key.toLowerCase() === 'k') {
                         e.preventDefault();
                         if (appMode === 'workspace') { searchOpen ? closeSearch() : openSearch(); }
+                    }
+                    if (isMod && e.key.toLowerCase() === 's') {
+                        e.preventDefault();
+                        if (appMode === 'workspace') saveCurrentProjectToFolder();
+                    }
+                    if (!isEditable && isMod && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (appMode === 'workspace') undoChange();
+                    }
+                    if (!isEditable && isMod && e.key.toLowerCase() === 'z' && e.shiftKey) {
+                        e.preventDefault();
+                        if (appMode === 'workspace') redoChange();
                     }
                     if (e.key === 'Escape' && searchOpen) closeSearch();
                 };
                 window.addEventListener('keydown', handler);
                 return () => window.removeEventListener('keydown', handler);
-            }, [appMode, searchOpen]);
+            }, [appMode, searchOpen, nodes, annotations, currentProjectName, currentProjectId, manualSaveStatus.connected]);
 
             const handleSearchNavigate = (result) => {
                 closeSearch();
@@ -1313,19 +1787,21 @@
             };
 
             // --- ノード操作 ---
-            const handleSetupSave = (name) => {
+            const handleSetupSave = (name, categoryInput) => {
                 let id = currentProjectId;
                 const now = Date.now();
+                const category = (categoryInput || '').trim() || '未分類';
                 let newNodes = { ...nodes };
                 if (!id) {
                     id = generateId();
-                    const newProject = { id, name, createdAt: now, updatedAt: now, nodeCount: 1, annotationCount: 0, preview: '質問一覧から展開して確認してください。' };
+                    const manualOrder = projectList.reduce((max, p) => Math.max(max, Number.isFinite(p.manualOrder) ? p.manualOrder : 0), -1) + 1;
+                    const newProject = { id, name, category, createdAt: now, updatedAt: now, manualOrder, nodeCount: 1, annotationCount: 0, preview: '質問一覧から展開して確認してください。' };
                     setProjectList(prev => { const u = [newProject, ...prev]; Storage.saveProjectList(u); return u; });
                     newNodes = { root: { id: 'root', parentId: null, question: name, sections: [{ id: generateId(), title: '', content: '' }], children: [] } };
                 } else {
                     newNodes['root'] = { ...newNodes['root'], question: name };
                 }
-                setCurrentProjectId(id); setCurrentProjectName(name); setNodes(newNodes);
+                setCurrentProjectId(id); setCurrentProjectName(name); setCurrentProjectCategory(category); setNodes(newNodes);
                 Storage.saveProjectData(id, { nodes: newNodes, annotations });
                 setAppMode('workspace');
                 if (panes.length === 0) setPanes([{ type: 'view', nodeId: 'root' }]);
@@ -1519,6 +1995,131 @@
                 return path;
             };
 
+
+            const updateManualSaveStatus = (patch) => {
+                setManualSaveStatus(prev => {
+                    const next = { ...prev, ...patch };
+                    Storage.saveManualSaveConfig({
+                        connected: next.connected,
+                        folderName: next.folderName,
+                        lastSavedAt: next.lastSavedAt,
+                        lastSavedFile: next.lastSavedFile,
+                        lastError: next.lastError
+                    });
+                    return next;
+                });
+            };
+
+            const buildCurrentProjectSaveData = () => {
+                const meta = projectList.find(p => p.id === currentProjectId);
+                return {
+                    type: 'annotator-qa-project-file',
+                    version: 1,
+                    savedAt: Date.now(),
+                    project: {
+                        id: currentProjectId,
+                        name: currentProjectName || meta?.name || '名前なし',
+                        category: currentProjectCategory || meta?.category || '未分類',
+                        createdAt: meta?.createdAt || Date.now(),
+                        updatedAt: Date.now(),
+                        nodes,
+                        annotations
+                    }
+                };
+            };
+
+            const connectSaveFolder = async () => {
+                if (!ManualSave.isSupported()) {
+                    alert('このブラウザはフォルダ保存機能に未対応です。JSONエクスポートを併用してください。');
+                    return;
+                }
+                try {
+                    const dirHandle = await ManualSave.pickDirectory();
+                    const granted = await ManualSave.requestWritePermission(dirHandle, true);
+                    if (!granted) {
+                        alert('フォルダへの書き込み権限がありません。');
+                        return;
+                    }
+                    saveDirHandleRef.current = dirHandle;
+                    await ManualSave.setDirectoryHandle(dirHandle);
+                    updateManualSaveStatus({ connected: true, folderName: dirHandle.name || '', lastError: '' });
+                    alert('保存フォルダを接続しました。Ctrl/Cmd + S で現在のまとめを保存できます。');
+                } catch (e) {
+                    if (e?.name !== 'AbortError') alert('保存フォルダの接続に失敗しました。');
+                }
+            };
+
+            const saveCurrentProjectToFolder = async () => {
+                if (!currentProjectId || !nodes['root']) return;
+                if (!saveDirHandleRef.current) {
+                    alert('先に「保存フォルダを接続」を実行してください。');
+                    return;
+                }
+                const granted = await ManualSave.requestWritePermission(saveDirHandleRef.current, true);
+                if (!granted) {
+                    updateManualSaveStatus({ connected: false, lastError: '保存権限がないため保存できませんでした' });
+                    alert('保存権限がないため保存できませんでした。再接続してください。');
+                    return;
+                }
+                try {
+                    const payload = buildCurrentProjectSaveData();
+                    const result = await ManualSave.writeProjectFile(saveDirHandleRef.current, currentProjectCategory || '未分類', currentProjectName, payload);
+                    updateManualSaveStatus({
+                        connected: true,
+                        folderName: saveDirHandleRef.current.name || manualSaveStatus.folderName,
+                        lastSavedAt: Date.now(),
+                        lastSavedFile: `${result.folder}/${result.fileName}`,
+                        lastError: ''
+                    });
+                } catch (e) {
+                    updateManualSaveStatus({ lastError: '手動保存に失敗しました' });
+                    alert('手動保存に失敗しました。');
+                }
+            };
+
+            const getSnapshotString = () => JSON.stringify({ nodes, annotations, currentProjectName });
+            const applySnapshot = (snapshotString) => {
+                try {
+                    const parsed = JSON.parse(snapshotString);
+                    historySuspendRef.current = true;
+                    setNodes(parsed.nodes || {});
+                    setAnnotations(parsed.annotations || []);
+                    setCurrentProjectName(parsed.currentProjectName || '');
+                    lastSnapshotRef.current = snapshotString;
+                    setTimeout(() => { historySuspendRef.current = false; }, 0);
+                } catch (e) {}
+            };
+            const undoChange = () => {
+                if (historyUndoRef.current.length === 0) return;
+                const current = getSnapshotString();
+                const prev = historyUndoRef.current.pop();
+                historyRedoRef.current.push(current);
+                applySnapshot(prev);
+            };
+            const redoChange = () => {
+                if (historyRedoRef.current.length === 0) return;
+                const current = getSnapshotString();
+                const next = historyRedoRef.current.pop();
+                historyUndoRef.current.push(current);
+                applySnapshot(next);
+            };
+
+            useEffect(() => {
+                if (!currentProjectId || !nodes['root']) return;
+                const snap = getSnapshotString();
+                if (!lastSnapshotRef.current) {
+                    lastSnapshotRef.current = snap;
+                    return;
+                }
+                if (historySuspendRef.current) return;
+                if (snap !== lastSnapshotRef.current) {
+                    historyUndoRef.current.push(lastSnapshotRef.current);
+                    if (historyUndoRef.current.length > 100) historyUndoRef.current.shift();
+                    historyRedoRef.current = [];
+                    lastSnapshotRef.current = snap;
+                }
+            }, [nodes, annotations, currentProjectName, currentProjectCategory, currentProjectId]);
+
             // --- エクスポート / インポート ---
             const doExport = (projectIds) => {
                 const exportData = {
@@ -1526,7 +2127,7 @@
                     projects: projectIds.map(id => {
                         const meta = projectList.find(p => p.id === id);
                         const data = Storage.getProjectData(id);
-                        return { name: meta?.name || '名前なし', nodes: data?.nodes || {}, annotations: data?.annotations || [], createdAt: meta?.createdAt, updatedAt: meta?.updatedAt };
+                        return { name: meta?.name || '名前なし', category: meta?.category || '未分類', nodes: data?.nodes || {}, annotations: data?.annotations || [], createdAt: meta?.createdAt, updatedAt: meta?.updatedAt };
                     })
                 };
                 const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -1537,21 +2138,113 @@
             const exportAllProjects = () => doExport(projectList.map(p => p.id));
             const exportSingleProject = (id) => doExport([id]);
 
-            const importProjects = (data) => {
-                if (!data || (data.type !== 'annotator-qa-export' && data.type !== 'annotator-qa-export') || !Array.isArray(data.projects)) {
-                    alert('無効なファイル形式です。このツールからエクスポートしたファイルを選択してください。'); return;
+            const extractImportTargets = (data) => {
+                if (!data || !data.type) return null;
+                if (data.type === 'annotator-qa-export' && Array.isArray(data.projects)) return data.projects;
+                if (data.type === 'annotator-qa-project-file' && data.project) return [data.project];
+                return null;
+            };
+
+            const importProjectPayloads = (payloads, opts = {}) => {
+                const { replaceAll = false, forceCategory = null } = opts;
+                const targets = [];
+                let invalidCount = 0;
+                payloads.forEach(payload => {
+                    const arr = extractImportTargets(payload);
+                    if (!arr) invalidCount++;
+                    else targets.push(...arr);
+                });
+                if (targets.length === 0) {
+                    alert('有効なファイル形式が見つかりませんでした。');
+                    return;
                 }
+
+                if (replaceAll) {
+                    projectList.forEach(p => Storage.deleteProjectData(p.id));
+                }
+                const newList = replaceAll ? [] : [...projectList];
                 let count = 0;
-                const newList = [...projectList];
-                data.projects.forEach(proj => {
+                targets.forEach(proj => {
                     const id = generateId(); const now = Date.now();
                     const migratedNodes = migrateNodes(proj.nodes || {});
-                    newList.unshift({ id, name: proj.name || '名前なし', createdAt: proj.createdAt || now, updatedAt: proj.updatedAt || now, nodeCount: Object.keys(migratedNodes).length, annotationCount: (proj.annotations || []).length, preview: migratedNodes?.root?.sections?.[0]?.content?.substring(0, 100) || '' });
-                    Storage.saveProjectData(id, { nodes: migratedNodes, annotations: migrateAnnotations(proj.annotations || []) });
+                    const migratedAnnotations = migrateAnnotations(proj.annotations || []);
+                    const manualOrder = newList.reduce((max, p) => Math.max(max, Number.isFinite(p.manualOrder) ? p.manualOrder : 0), -1) + 1;
+                    newList.unshift({
+                        id,
+                        name: proj.name || '名前なし',
+                        category: forceCategory || proj.category || '未分類',
+                        createdAt: proj.createdAt || now,
+                        updatedAt: proj.updatedAt || now,
+                        manualOrder,
+                        nodeCount: Object.keys(migratedNodes).length,
+                        annotationCount: migratedAnnotations.length,
+                        preview: migratedNodes?.root?.sections?.[0]?.content?.substring(0, 100) || ''
+                    });
+                    Storage.saveProjectData(id, { nodes: migratedNodes, annotations: migratedAnnotations });
                     count++;
                 });
                 Storage.saveProjectList(newList); setProjectList(newList);
-                alert(count + ' 件のまとめをインポートしました。');
+                alert(count + ' 件のまとめをインポートしました。' + (invalidCount > 0 ? `（${invalidCount}件は形式不正でスキップ）` : ''));
+            };
+
+            const importProjectFiles = (dataList) => importProjectPayloads(dataList);
+            const importProjectFilesToFolder = (category, dataList) => {
+                if (!category || category === 'ALL') {
+                    alert('インポート先フォルダを選択してください。');
+                    return;
+                }
+                importProjectPayloads(dataList, { forceCategory: category });
+            };
+
+            const syncImportFromFolder = (category, payloads) => {
+                if (!category || category === 'ALL') {
+                    alert('同期先フォルダを選択してください。');
+                    return;
+                }
+                const targets = [];
+                let invalidCount = 0;
+                payloads.forEach(payload => {
+                    const arr = extractImportTargets(payload);
+                    if (!arr) invalidCount++;
+                    else targets.push(...arr);
+                });
+                if (targets.length === 0) {
+                    alert('有効なJSONデータが見つかりませんでした。');
+                    return;
+                }
+                if (!confirm(`「${category}」フォルダ内のページを、読み込んだ ${targets.length} 件で置き換えます。よろしいですか？`)) return;
+
+                const prevInCategory = projectList.filter(p => (p.category || '未分類') === category);
+                prevInCategory.forEach(p => Storage.deleteProjectData(p.id));
+                const baseList = projectList.filter(p => (p.category || '未分類') !== category);
+
+                const newList = [...baseList];
+                let count = 0;
+                targets.forEach(proj => {
+                    const id = generateId(); const now = Date.now();
+                    const migratedNodes = migrateNodes(proj.nodes || {});
+                    const migratedAnnotations = migrateAnnotations(proj.annotations || []);
+                    const manualOrder = newList.reduce((max, p) => Math.max(max, Number.isFinite(p.manualOrder) ? p.manualOrder : 0), -1) + 1;
+                    newList.unshift({
+                        id,
+                        name: proj.name || '名前なし',
+                        category,
+                        createdAt: proj.createdAt || now,
+                        updatedAt: proj.updatedAt || now,
+                        manualOrder,
+                        nodeCount: Object.keys(migratedNodes).length,
+                        annotationCount: migratedAnnotations.length,
+                        preview: migratedNodes?.root?.sections?.[0]?.content?.substring(0, 100) || ''
+                    });
+                    Storage.saveProjectData(id, { nodes: migratedNodes, annotations: migratedAnnotations });
+                    count++;
+                });
+                Storage.saveProjectList(newList); setProjectList(newList);
+
+                if (currentProjectId && prevInCategory.some(p => p.id === currentProjectId)) {
+                    goHome();
+                }
+                alert(`${category} フォルダを ${count} 件で同期しました。` + (invalidCount > 0 ? `（${invalidCount}件は形式不正でスキップ）` : ''));
             };
 
 
@@ -1564,25 +2257,39 @@
                                 <i className="ph-bold ph-tree-structure text-xl"></i>
                             </div>
                             <h1 className="font-bold text-lg tracking-wide cursor-pointer hover:text-blue-300 transition-colors" onClick={goHome}>
-                                Q&Aツリー<span className="hidden sm:inline-block text-slate-400 font-normal text-sm ml-2">| 多重構造まとめツール</span>
+                                Q&Aツリー [Dev]<span className="hidden sm:inline-block text-slate-400 font-normal text-sm ml-2">| 多重構造まとめツール</span>
                             </h1>
                             {appMode !== 'home' && currentProjectName && (
                                 <div className="hidden sm:flex items-center gap-2 ml-4">
                                     <i className="ph ph-caret-right text-slate-600 text-sm"></i>
-                                    <span className="text-slate-300 text-sm font-medium truncate max-w-[300px]">{currentProjectName}</span>
+                                    <span className="text-slate-300 text-sm font-medium truncate max-w-[220px]">{currentProjectName}</span>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full border border-slate-600 text-slate-300"><i className="ph ph-folder-simple mr-1"></i>{currentProjectCategory || '未分類'}</span>
                                 </div>
                             )}
                         </div>
-                        <div className="ml-auto flex items-center gap-4">
+                        <div className="ml-auto flex items-center gap-3">
+                            {manualSaveStatus.supported && (
+                                <>
+                                    <button onClick={connectSaveFolder} className="text-xs px-3 py-1.5 rounded-md border border-emerald-500/40 text-emerald-200 hover:text-white hover:border-emerald-300 transition-colors">
+                                        <i className="ph-bold ph-folder-simple-plus mr-1"></i> 保存フォルダを接続
+                                    </button>
+                                    <button onClick={saveCurrentProjectToFolder} className="text-xs px-3 py-1.5 rounded-md border border-cyan-500/40 text-cyan-200 hover:text-white hover:border-cyan-300 transition-colors">
+                                        <i className="ph-bold ph-floppy-disk mr-1"></i> 保存 (Ctrl/Cmd+S)
+                                    </button>
+                                </>
+                            )}
+                            {!manualSaveStatus.supported && <span className="text-[11px] text-amber-300">このブラウザではフォルダ保存未対応</span>}
+                            {manualSaveStatus.folderName && <span className="hidden md:inline text-[11px] text-slate-400">{manualSaveStatus.folderName}{manualSaveStatus.lastSavedFile ? ` / ${manualSaveStatus.lastSavedFile}` : ''}{manualSaveStatus.lastSavedAt ? ` / ${new Date(manualSaveStatus.lastSavedAt).toLocaleTimeString('ja-JP')} 保存` : ''}</span>}
+                            {manualSaveStatus.lastError && <span className="hidden lg:inline text-[11px] text-rose-300">{manualSaveStatus.lastError}</span>}
                             {appMode !== 'home' && <button onClick={goHome} className="text-slate-400 hover:text-white text-sm flex items-center gap-1.5 transition-colors font-medium"><i className="ph-bold ph-house"></i> ホーム</button>}
                         </div>
                     </header>
 
                     {appMode === 'home' && (
-                        <HomeScreen projects={projectList} onOpen={openProject} onCreateNew={createNewProject} onDelete={deleteProject} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImport={importProjects} />
+                        <HomeScreen projects={projectList} customFolders={customFolders} onOpen={openProject} onCreateNew={createNewProject} onCreateInFolder={createNewProject} onDelete={deleteProject} onMoveToFolder={moveProjectToCategory} onMoveProjectOrder={moveProjectOrder} onExportSingle={exportSingleProject} onExportAll={exportAllProjects} onImportFiles={importProjectFiles} onImportFilesToFolder={importProjectFilesToFolder} onSyncFromFolder={syncImportFromFolder} onCreateFolder={createFolder} onDeleteFolder={deleteFolder} onRenameFolder={renameFolder} />
                     )}
                     {appMode === 'setup' && (
-                        <SetupScreen initialName={currentProjectName} isNew={!currentProjectId} onSave={handleSetupSave}
+                        <SetupScreen initialName={currentProjectName} initialCategory={currentProjectCategory} isNew={!currentProjectId} onSave={handleSetupSave}
                             onCancel={currentProjectId ? () => { setAppMode('workspace'); if (panes.length === 0) setPanes([{ type: 'view', nodeId: 'root' }]); } : (projectList.length > 0 ? goHome : null)} />
                     )}
 
@@ -1720,6 +2427,8 @@
                                                 treeActiveNodeIds={treeActiveNodeIds}
                                                 treeActiveAnnotationId={treeActiveAnnotationId}
                                                 onOpenSearch={isRootPane ? openSearch : null}
+                                                rootPaneWidth={rootPaneWidth}
+                                                onStartRootPaneResize={isRootPane ? startRootPaneResize : null}
                                             />
                                         );
                                     }
