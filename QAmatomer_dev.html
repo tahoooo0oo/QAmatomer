@@ -230,6 +230,13 @@
             },
             saveCustomFolders(list) {
                 localStorage.setItem('annotator-qa-custom-folders', JSON.stringify(list));
+            },
+            getEditorPrefs() {
+                try { return JSON.parse(localStorage.getItem('annotator-qa-editor-prefs') || '{}'); }
+                catch(e) { return {}; }
+            },
+            saveEditorPrefs(prefs) {
+                localStorage.setItem('annotator-qa-editor-prefs', JSON.stringify(prefs));
             }
         };
 
@@ -377,7 +384,7 @@
                 if (matches.length === 0) return;
 
                 const setupEv = (el, cov) => {
-                    el.onmouseenter = () => { if (callbacksRef.current.onMarkHover) { const r = el.getBoundingClientRect(); const t = cov.map(m=>m.title).filter(Boolean); callbacksRef.current.onMarkHover(true, t.length>1?t.join(' / '):(t[0]||'注釈'), r); } };
+                    el.onmouseenter = () => { if (callbacksRef.current.onMarkHover) { const r = el.getBoundingClientRect(); const t = cov.map(m=>m.title).filter(Boolean); callbacksRef.current.onMarkHover(true, t.length>1?t.join(' / '):(t[0]||'テキスト注釈'), r); } };
                     el.onmouseleave = () => { if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false); };
                     el.onclick = (e) => { e.preventDefault(); e.stopPropagation(); window.getSelection().removeAllRanges(); if (callbacksRef.current.onMarkHover) callbacksRef.current.onMarkHover(false); if (callbacksRef.current.onMarkClick) callbacksRef.current.onMarkClick(cov[0].id); };
                 };
@@ -559,7 +566,7 @@
                                 <span className="flex items-center gap-1"><i className="ph ph-calendar-blank"></i>{new Date(project.createdAt).toLocaleDateString('ja-JP')}</span>
                                 <span className="flex items-center gap-1"><i className="ph ph-clock"></i>{new Date(project.updatedAt).toLocaleDateString('ja-JP')} 更新</span>
                                 <span className="flex items-center gap-1"><i className="ph ph-list-dashes"></i>{project.nodeCount || 0} ノード</span>
-                                {(project.annotationCount || 0) > 0 && <span className="flex items-center gap-1 text-amber-500"><i className="ph-fill ph-highlighter"></i>{project.annotationCount} 注釈</span>}
+                                {(project.annotationCount || 0) > 0 && <span className="flex items-center gap-1 text-amber-500"><i className="ph-fill ph-highlighter"></i>{project.annotationCount} テキスト注釈</span>}
                             </div>
                             {project.preview && <p className="mt-3 text-sm text-gray-500 line-clamp-2 leading-relaxed">{project.preview}</p>}
                         </div>
@@ -800,7 +807,7 @@
                     </div>
                     <div className="max-h-[160px] overflow-y-auto">
                         {annotations.map(a => (
-                            <div key={a.id} onClick={() => onSelect(a.id)} className={'anno-list-item flex items-center gap-2' + (a.id === activeAnnotationId ? ' active' : '') + (isAddedDisplayKind(a.displayKind) ? ' bg-amber-100/40' : '')}>
+                            <div key={a.id} onClick={() => onSelect(a.id)} className={'anno-list-item flex items-center gap-2' + (a.id === activeAnnotationId ? ' active' : '') + (isAddedDisplayKind(a.displayKind) ? ' bg-teal-100/90' : '')}>
                                 <i className={`ph-fill ph-highlighter text-xs shrink-0 ${isAddedDisplayKind(a.displayKind) ? 'text-amber-600' : 'text-amber-500'}`}></i>
                                 <div className="flex-1 min-w-0">
                                     <span className="text-sm font-medium text-gray-700 truncate block">{a.title}</span>
@@ -816,11 +823,11 @@
 
 
         // --- ツリーナビゲーション ノードアイテム (再帰) ---
-        const TreeNodeItem = ({ node, level, nodes, annotations, expandedIds, onToggle, onExpand, onSelectNode, onSelectAnnotation, activeNodeIds, activeAnnotationId, onMoveNode }) => {
+        const TreeNodeItem = ({ node, level, nodes, annotations, expandedIds, onToggle, onExpand, onSelectNode, onSelectAnnotation, activeNodeIds, activeAnnotationId, onMoveNode, showSupplementItems }) => {
             const isExpanded = expandedIds.has(node.id);
             const isActive = activeNodeIds.has(node.id);
-            const children = node.children.map(id => nodes[id]).filter(Boolean);
-            const nodeAnnotations = annotations.filter(a => a.nodeId === node.id);
+            const children = node.children.map(id => nodes[id]).filter(Boolean).filter(child => showSupplementItems || !isAddedDisplayKind(child.displayKind));
+            const nodeAnnotations = annotations.filter(a => a.nodeId === node.id).filter(a => showSupplementItems || !isAddedDisplayKind(a.displayKind));
             const hasItems = children.length > 0 || nodeAnnotations.length > 0;
             const pl = 8 + level * 14;
             const isAdded = isAddedDisplayKind(node.displayKind);
@@ -830,12 +837,12 @@
                     <div
                         onClick={() => { onExpand(node.id); onSelectNode(node.id); }}
                         style={{ paddingLeft: `${pl}px` }}
-                        className={`flex items-center gap-1 py-1.5 pr-1 rounded-md cursor-pointer transition-colors text-xs ${isActive ? (isAdded ? 'bg-amber-100 text-amber-900 font-bold' : 'bg-blue-100 text-blue-800 font-bold') : (isAdded ? 'bg-amber-50/60 text-amber-900 hover:bg-amber-100/70' : 'hover:bg-gray-100 text-gray-700')}`}
+                        className={`flex items-center gap-1 py-1.5 pr-1 rounded-md cursor-pointer transition-colors text-xs ${isActive ? (isAdded ? 'bg-teal-200 text-teal-950 font-bold' : 'bg-blue-100 text-blue-800 font-bold') : (isAdded ? 'bg-teal-100/90 text-teal-950 hover:bg-teal-200/80' : 'hover:bg-gray-100 text-gray-700')}`}
                     >
                         <span onClick={(e) => { e.stopPropagation(); onToggle(node.id); }} className="w-3 shrink-0 flex items-center justify-center">
                             {hasItems && <i className={`ph-bold ph-caret-${isExpanded ? 'down' : 'right'} text-[9px] ${isActive ? 'text-blue-500' : 'text-gray-400'}`}></i>}
                         </span>
-                        <i className={`ph-fill ph-question text-[10px] shrink-0 ${isActive ? (isAdded ? 'text-amber-700' : 'text-blue-600') : (isAdded ? 'text-amber-400' : 'text-gray-300')}`}></i>
+                        <i className={`ph-fill ph-question text-[10px] shrink-0 ${isActive ? (isAdded ? 'text-teal-700' : 'text-blue-600') : (isAdded ? 'text-teal-500' : 'text-gray-300')}`}></i>
                         <InlineTitle text={node.question} className="truncate leading-snug flex-1 min-w-0" />
                         {onMoveNode && node.parentId && (
                             <span className="flex gap-0.5 opacity-0 group-hover/treerow:opacity-100 transition-opacity shrink-0 ml-1" onClick={e => e.stopPropagation()}>
@@ -849,7 +856,7 @@
                             {children.map(child => (
                                 <TreeNodeItem key={child.id} node={child} level={level + 1} nodes={nodes} annotations={annotations}
                                     expandedIds={expandedIds} onToggle={onToggle} onExpand={onExpand} onSelectNode={onSelectNode} onSelectAnnotation={onSelectAnnotation}
-                                    activeNodeIds={activeNodeIds} activeAnnotationId={activeAnnotationId} onMoveNode={onMoveNode} />
+                                    activeNodeIds={activeNodeIds} activeAnnotationId={activeAnnotationId} onMoveNode={onMoveNode} showSupplementItems={showSupplementItems} />
                             ))}
                             {nodeAnnotations.map(anno => {
                                 const isAnnoActive = activeAnnotationId === anno.id;
@@ -858,7 +865,7 @@
                                     <div key={anno.id}
                                         onClick={(e) => { e.stopPropagation(); onSelectAnnotation(node.id, anno.id); }}
                                         style={{ paddingLeft: `${pl + 14}px` }}
-                                        className={`flex items-center gap-1 py-1 pr-2 rounded-md cursor-pointer transition-colors text-xs ${isAnnoActive ? 'bg-amber-100 text-amber-800 font-bold' : (isAddedAnno ? 'bg-amber-50/70 text-amber-900 hover:bg-amber-100/70' : 'hover:bg-amber-50 text-gray-600')}`}
+                                        className={`flex items-center gap-1 py-1 pr-2 rounded-md cursor-pointer transition-colors text-xs ${isAnnoActive ? 'bg-amber-100 text-amber-800 font-bold' : (isAddedAnno ? 'bg-teal-100/90 text-teal-950 hover:bg-teal-200/70' : 'hover:bg-amber-50 text-gray-600')}`}
                                     >
                                         <span className="w-3 shrink-0"></span>
                                         <i className={`ph-fill ph-highlighter text-[10px] shrink-0 ${isAnnoActive ? 'text-amber-500' : (isAddedAnno ? 'text-amber-500' : 'text-amber-300')}`}></i>
@@ -873,11 +880,12 @@
         };
 
         // --- ViewPane ---
-        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, onMoveNode, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId, onOpenSearch, rootPaneWidth, onStartRootPaneResize }) => {
+        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, onMoveNode, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId, onOpenSearch, rootPaneWidth, onStartRootPaneResize, showSupplementItemsInTree, onToggleShowSupplementItemsInTree }) => {
             const [listCollapsed, setListCollapsed] = useState(!isRoot);
             const [collapsedSections, setCollapsedSections] = useState(new Set());
             const toggleSection = (sectionId) => setCollapsedSections(prev => { const next = new Set(prev); next.has(sectionId) ? next.delete(sectionId) : next.add(sectionId); return next; });
             const isAdded = isAddedDisplayKind(node.displayKind);
+            const visibleRootChildren = isRoot ? node.children.filter(child => showSupplementItemsInTree || !isAddedDisplayKind(child.displayKind)) : node.children;
 
             // セクションごとにアノテーションを振り分け
             const sectionAnnotations = {};
@@ -915,9 +923,9 @@
                 const isChildSelected = selectedChildId === childNode.id;
                 const isAddedChild = isAddedDisplayKind(childNode.displayKind);
                 return (
-                    <div key={childNode.id} data-keynav={childNode.id} onClick={() => onOpenChild(childNode.id)} className={`px-3 py-2 rounded-lg border transition-all cursor-pointer group ${isChildSelected ? (isAddedChild ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-100 shadow-sm' : 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-sm') : (isAddedChild ? 'bg-amber-50/50 border-amber-200 hover:border-amber-300 hover:shadow-sm' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-sm')}`}>
+                    <div key={childNode.id} data-keynav={childNode.id} onClick={() => onOpenChild(childNode.id)} className={`px-3 py-2 rounded-lg border transition-all cursor-pointer group ${isChildSelected ? (isAddedChild ? 'border-teal-500 bg-teal-100 ring-2 ring-teal-100 shadow-sm' : 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-sm') : (isAddedChild ? 'bg-teal-100/90 border-teal-300 hover:border-teal-400 hover:shadow-sm' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-sm')}`}>
                         <div className="font-medium text-gray-800 flex items-center gap-2 text-sm">
-                            <i className={`ph-fill ph-question shrink-0 text-sm ${isChildSelected ? (isAddedChild ? 'text-amber-700' : 'text-blue-600') : (isAddedChild ? 'text-amber-400 group-hover:text-amber-500 transition-colors' : 'text-gray-300 group-hover:text-blue-400 transition-colors')}`}></i>
+                            <i className={`ph-fill ph-question shrink-0 text-sm ${isChildSelected ? (isAddedChild ? 'text-teal-700' : 'text-blue-600') : (isAddedChild ? 'text-teal-500 group-hover:text-teal-600 transition-colors' : 'text-gray-300 group-hover:text-blue-400 transition-colors')}`}></i>
                             <InlineTitle text={childNode.question} className="leading-snug flex-1 min-w-0" />
                             {onMoveNode && (
                                 <span className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={e => e.stopPropagation()}>
@@ -934,7 +942,7 @@
                 const isSelected = activeAnnotationId === annotation.id;
                 const isAddedAnnotation = isAddedDisplayKind(annotation.displayKind);
                 return (
-                    <div key={annotation.id} onClick={() => onAnnotationClick(annotation.id)} className={`px-3 py-2 rounded-lg border transition-all cursor-pointer group ${isSelected ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-100 shadow-sm' : (isAddedAnnotation ? 'bg-amber-50/50 border-amber-200 hover:border-amber-300 hover:shadow-sm' : 'bg-white border-gray-200 hover:border-amber-300 hover:shadow-sm')}`}>
+                    <div key={annotation.id} onClick={() => onAnnotationClick(annotation.id)} className={`px-3 py-2 rounded-lg border transition-all cursor-pointer group ${isSelected ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-100 shadow-sm' : (isAddedAnnotation ? 'bg-teal-100/90 border-teal-300 hover:border-teal-400 hover:shadow-sm' : 'bg-white border-gray-200 hover:border-amber-300 hover:shadow-sm')}`}>
                         <div className="font-medium text-gray-800 flex items-start gap-2 text-sm">
                             <i className={`ph-fill ph-highlighter mt-0.5 shrink-0 text-sm ${isSelected ? 'text-amber-500' : (isAddedAnnotation ? 'text-amber-500 group-hover:text-amber-600 transition-colors' : 'text-amber-300 group-hover:text-amber-400 transition-colors')}`}></i>
                             <div className="flex-1 min-w-0">
@@ -949,10 +957,10 @@
             return (
                 <div className={`flex flex-col h-full bg-white border-r border-gray-200 shrink-0 relative z-0 shadow-[4px_0_24px_rgba(0,0,0,0.06)] animate-slide-in-right ${isRoot ? 'bg-slate-50 w-[85vw] md:w-auto' : 'w-[90vw] md:w-[50vw] lg:w-[45vw] xl:w-[40vw]'}`} style={isRoot ? { width: `${Math.min(520, Math.max(220, rootPaneWidth || 300))}px` } : undefined}>
                     {breadcrumb.length > 0 && <BreadcrumbTrail path={breadcrumb} />}
-                    <div className={`p-4 border-b flex items-start justify-between shrink-0 shadow-sm z-10 ${isAdded ? 'border-amber-100 bg-amber-50/60' : 'border-gray-100 bg-white'}`}>
+                    <div className={`p-4 border-b flex items-start justify-between shrink-0 shadow-sm z-10 ${isAdded ? 'border-teal-200 bg-teal-100/80' : 'border-gray-100 bg-white'}`}>
                         <div className="flex items-start gap-3 overflow-hidden flex-1">
-                            <i className={`ph-fill ${isRoot ? 'ph-folders text-indigo-500' : (isAdded ? 'ph-question text-amber-600' : 'ph-question text-blue-500')} text-2xl shrink-0 mt-0.5`}></i>
-                            <h2 className={`font-bold leading-snug ${isRoot ? 'text-xl text-gray-800' : (isAdded ? 'text-lg text-amber-950' : 'text-lg text-gray-800')}`}><InlineTitle text={node.question} /></h2>
+                            <i className={`ph-fill ${isRoot ? 'ph-folders text-indigo-500' : (isAdded ? 'ph-question text-teal-600' : 'ph-question text-blue-500')} text-2xl shrink-0 mt-0.5`}></i>
+                            <h2 className={`font-bold leading-snug ${isRoot ? 'text-xl text-gray-800' : (isAdded ? 'text-lg text-teal-950' : 'text-lg text-gray-800')}`}><InlineTitle text={node.question} /></h2>
                         </div>
                         <div className="flex items-center gap-1 shrink-0 ml-2">
                             {isRoot && onOpenSearch && (
@@ -975,11 +983,14 @@
                                 <i className={`ph-bold ph-caret-${listCollapsed ? 'right' : 'down'} text-gray-400 text-xs`}></i>
                                 <i className={`ph-bold ${isRoot ? 'ph-list-bullets' : 'ph-list-dashes'} text-gray-500 text-xs`}></i>
                                 <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">
-                                    {isRoot ? `質問一覧 (${node.children.length})` : `注釈・派生する質問 (${node.children.length + (nodeAnnotations?.length || 0)})`}
+                                    {isRoot ? `質問一覧 (${visibleRootChildren.length})` : `テキスト注釈・派生する質問 (${node.children.length + (nodeAnnotations?.length || 0)})`}
                                 </span>
                             </button>
                             {isRoot && onTreeExpandAll && (
                                 <div className="flex items-center gap-0.5 pr-2">
+                                    <button onClick={onToggleShowSupplementItemsInTree} title={showSupplementItemsInTree ? '補足を非表示' : '補足を表示'} className={`px-2 py-1 rounded border text-[10px] font-bold transition-colors ${showSupplementItemsInTree ? 'border-teal-300 bg-teal-100 text-teal-800 hover:bg-teal-200' : 'border-gray-300 bg-white text-gray-500 hover:border-teal-300 hover:text-teal-700'}`}>
+                                        補足
+                                    </button>
                                     <button onClick={onTreeExpandAll} title="全展開" className="p-1 rounded hover:bg-gray-200 transition-colors text-gray-400 hover:text-gray-600">
                                         <i className="ph-bold ph-arrows-out-simple text-xs"></i>
                                     </button>
@@ -999,12 +1010,12 @@
                                 {isRoot ? (
                                     /* ルートはツリーナビゲーター */
                                     <div className="py-1">
-                                        {node.children.length === 0 ? (
+                                        {visibleRootChildren.length === 0 ? (
                                             <div className="text-center py-4 opacity-60 flex flex-col items-center justify-center">
                                                 <i className="ph-fill ph-list-plus text-xl text-gray-300 mb-1"></i>
                                                 <p className="text-xs text-gray-400">まだ質問がありません</p>
                                             </div>
-                                        ) : node.children.map(childNode => (
+                                        ) : visibleRootChildren.map(childNode => (
                                             <TreeNodeItem key={childNode.id} node={childNode} level={0}
                                                 nodes={allNodes || {}} annotations={allAnnotations || []}
                                                 expandedIds={treeExpandedIds || new Set()}
@@ -1014,7 +1025,8 @@
                                                 onSelectAnnotation={onTreeSelectAnnotation || (() => {})}
                                                 activeNodeIds={treeActiveNodeIds || new Set()}
                                                 activeAnnotationId={treeActiveAnnotationId}
-                                                onMoveNode={onMoveNode || null} />
+                                                onMoveNode={onMoveNode || null}
+                                                showSupplementItems={showSupplementItemsInTree} />
                                         ))}
                                     </div>
                                 ) : (
@@ -1088,8 +1100,8 @@
                                                         {node.sections.length > 1 && <div className="text-[10px] font-bold text-gray-300 uppercase tracking-widest">段落 {i+1}</div>}
                                                         {i === 0 && (
                                                             <div className="flex items-center gap-2 mt-1">
-                                                                <div className={`text-xs font-bold flex items-center gap-1 uppercase tracking-wider ${isAdded ? 'text-amber-700' : 'text-green-600'}`}><i className="ph-fill ph-check-circle text-sm"></i> 回答・解説</div>
-                                                                <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded">テキストを選択→注釈を追加</span>
+                                                                <div className={`text-xs font-bold flex items-center gap-1 uppercase tracking-wider ${isAdded ? 'text-teal-800' : 'text-green-600'}`}><i className="ph-fill ph-check-circle text-sm"></i> 回答・解説</div>
+                                                                <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded">テキストを選択→テキスト注釈を追加</span>
                                                             </div>
                                                         )}
                                                     </div>
@@ -1110,7 +1122,7 @@
                                             )}
                                             {!isSectionCollapsed && (
                                                 <div className="px-6 py-4" onMouseUp={handleSectionMouseUp(section.id)}>
-                                                    <div className={isAdded ? 'selection:bg-amber-100' : 'selection:bg-blue-200'}>
+                                                    <div className={isAdded ? 'selection:bg-teal-200' : 'selection:bg-blue-200'}>
                                                         <MarkdownViewer content={section.content} annotations={sectionAnnotations[section.id] || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} />
                                                     </div>
                                                 </div>
@@ -1139,10 +1151,15 @@
 
 
         // --- Q&A編集ペイン ---
-        const EditPane = ({ mode, isTopLevel, initialQuestion, initialSections, initialDisplayKind, breadcrumb, onSave, onCancel, scrollToSectionId }) => {
+        const EditPane = ({ mode, isTopLevel, initialQuestion, initialSections, initialDisplayKind, breadcrumb, onSave, onCancel, scrollToSectionId, onDisplayKindChange }) => {
             const isAdd = mode === 'add';
             const [question, setQuestion] = useState(initialQuestion || '');
             const [displayKind, setDisplayKind] = useState(normalizeDisplayKind(initialDisplayKind));
+            const handleDisplayKindChange = (nextKind) => {
+                const normalized = normalizeDisplayKind(nextKind);
+                setDisplayKind(normalized);
+                onDisplayKindChange?.(normalized);
+            };
             const [sections, setSections] = useState(() =>
                 (initialSections && initialSections.length > 0)
                     ? initialSections
@@ -1190,7 +1207,7 @@
                             </label>
                             <input type="text" value={question} onChange={e => setQuestion(e.target.value)} className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white shadow-sm font-bold text-gray-800" placeholder={isTopLevel ? "例：React Hooksとは何ですか？" : "例：なぜその技術が必要なのですか？"} />
                         </div>
-                        <DisplayKindToggle value={displayKind} onChange={setDisplayKind} />
+                        <DisplayKindToggle value={displayKind} onChange={handleDisplayKindChange} />
                         <div className="flex flex-col gap-3">
                             <label className="block text-sm font-bold text-gray-600 flex justify-between items-center">
                                 <span className="flex items-center gap-1"><i className="ph-fill ph-check-circle text-green-500"></i> 回答・解説</span>
@@ -1264,9 +1281,9 @@
                 const isChildSelected = selectedChildId === childNode.id;
                 const isAddedChild = isAddedDisplayKind(childNode.displayKind);
                 return (
-                    <div key={childNode.id} data-keynav={childNode.id} onClick={() => onOpenChild(childNode.id)} className={`px-3 py-2 rounded-lg border transition-all cursor-pointer group ${isChildSelected ? (isAddedChild ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-100 shadow-sm' : 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-sm') : (isAddedChild ? 'bg-amber-50/50 border-amber-200 hover:border-amber-300 hover:shadow-sm' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-sm')}`}>
+                    <div key={childNode.id} data-keynav={childNode.id} onClick={() => onOpenChild(childNode.id)} className={`px-3 py-2 rounded-lg border transition-all cursor-pointer group ${isChildSelected ? (isAddedChild ? 'border-teal-500 bg-teal-100 ring-2 ring-teal-100 shadow-sm' : 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-sm') : (isAddedChild ? 'bg-teal-100/90 border-teal-300 hover:border-teal-400 hover:shadow-sm' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-sm')}`}>
                         <div className="font-medium text-gray-800 flex items-start gap-2 text-sm">
-                            <i className={`ph-fill ph-question mt-0.5 shrink-0 text-sm ${isChildSelected ? (isAddedChild ? 'text-amber-700' : 'text-blue-600') : (isAddedChild ? 'text-amber-400 group-hover:text-amber-500 transition-colors' : 'text-gray-300 group-hover:text-blue-400 transition-colors')}`}></i>
+                            <i className={`ph-fill ph-question mt-0.5 shrink-0 text-sm ${isChildSelected ? (isAddedChild ? 'text-teal-700' : 'text-blue-600') : (isAddedChild ? 'text-teal-500 group-hover:text-teal-600 transition-colors' : 'text-gray-300 group-hover:text-blue-400 transition-colors')}`}></i>
                             <InlineTitle text={childNode.question} className="leading-snug flex-1 min-w-0" />
                         </div>
                     </div>
@@ -1277,7 +1294,7 @@
                 const isSelected = activeAnnotationId === anno.id;
                 const isAddedAnno = isAddedDisplayKind(anno.displayKind);
                 return (
-                    <div key={anno.id} onClick={() => onAnnotationClick(anno.id)} className={`px-3 py-2 rounded-lg border transition-all cursor-pointer group ${isSelected ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-100 shadow-sm' : (isAddedAnno ? 'bg-amber-50/50 border-amber-200 hover:border-amber-300 hover:shadow-sm' : 'bg-white border-gray-200 hover:border-amber-300 hover:shadow-sm')}`}>
+                    <div key={anno.id} onClick={() => onAnnotationClick(anno.id)} className={`px-3 py-2 rounded-lg border transition-all cursor-pointer group ${isSelected ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-100 shadow-sm' : (isAddedAnno ? 'bg-teal-100/90 border-teal-300 hover:border-teal-400 hover:shadow-sm' : 'bg-white border-gray-200 hover:border-amber-300 hover:shadow-sm')}`}>
                         <div className="font-medium text-gray-800 flex items-start gap-2 text-sm">
                             <i className={`ph-fill ph-highlighter mt-0.5 shrink-0 text-sm ${isSelected ? 'text-amber-500' : (isAddedAnno ? 'text-amber-500 group-hover:text-amber-600 transition-colors' : 'text-amber-300 group-hover:text-amber-400 transition-colors')}`}></i>
                             <div className="flex-1 min-w-0">
@@ -1294,10 +1311,10 @@
             return (
                 <div className="flex flex-col h-full bg-white border-r border-gray-200 shrink-0 w-[90vw] md:w-[50vw] lg:w-[45vw] xl:w-[40vw] relative z-0 shadow-[4px_0_24px_rgba(0,0,0,0.06)] animate-slide-in-right">
                     {breadcrumb.length > 0 && <BreadcrumbTrail path={breadcrumb} />}
-                    <div className={`p-4 border-b flex items-start justify-between shrink-0 shadow-sm z-10 ${isAdded ? 'border-amber-100 bg-amber-50/60' : 'border-gray-100 bg-white'}`}>
+                    <div className={`p-4 border-b flex items-start justify-between shrink-0 shadow-sm z-10 ${isAdded ? 'border-teal-200 bg-teal-100/80' : 'border-gray-100 bg-white'}`}>
                         <div className="flex items-start gap-3 overflow-hidden flex-1">
-                            <i className={`ph-fill ph-highlighter text-2xl shrink-0 mt-0.5 ${isAdded ? 'text-amber-600' : 'text-amber-500'}`}></i>
-                            <h2 className={`font-bold leading-snug text-lg ${isAdded ? 'text-amber-950' : 'text-gray-800'}`}><InlineTitle text={annotation.title} /></h2>
+                            <i className={`ph-fill ph-highlighter text-2xl shrink-0 mt-0.5 ${isAdded ? 'text-teal-600' : 'text-amber-500'}`}></i>
+                            <h2 className={`font-bold leading-snug text-lg ${isAdded ? 'text-teal-950' : 'text-gray-800'}`}><InlineTitle text={annotation.title} /></h2>
                         </div>
                         <div className="flex items-center gap-1 shrink-0 ml-2">
                             <button onClick={onAddChild} className="px-2.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 hover:border-blue-300 transition-colors flex items-center gap-1" title="質問を追加">
@@ -1329,7 +1346,7 @@
                         <button onClick={() => setListCollapsed(v => !v)} className="w-full px-4 py-1.5 flex items-center gap-1 hover:bg-gray-100 transition-colors shrink-0">
                             <i className={`ph-bold ph-caret-${listCollapsed ? 'right' : 'down'} text-gray-400 text-xs`}></i>
                             <i className="ph-bold ph-list-dashes text-gray-500 text-xs"></i>
-                            <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">注釈・派生する質問 ({totalCount})</span>
+                            <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">テキスト注釈・派生する質問 ({totalCount})</span>
                         </button>
                         {!listCollapsed && (
                             <div className="overflow-y-auto max-h-[8vh]" onScroll={onHideSelectionMenu}>
@@ -1385,8 +1402,8 @@
                                                         {sections.length > 1 && <div className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-1">段落 {i+1}</div>}
                                                         {i === 0 && (
                                                             <div className="flex items-center gap-2">
-                                                                <div className={`text-xs font-bold flex items-center gap-1 uppercase tracking-wider ${isAdded ? 'text-amber-700' : 'text-green-600'}`}><i className="ph-fill ph-check-circle text-sm"></i> 解説</div>
-                                                                <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded">テキストを選択→注釈を追加</span>
+                                                                <div className={`text-xs font-bold flex items-center gap-1 uppercase tracking-wider ${isAdded ? 'text-teal-800' : 'text-green-600'}`}><i className="ph-fill ph-check-circle text-sm"></i> 解説</div>
+                                                                <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded">テキストを選択→テキスト注釈を追加</span>
                                                             </div>
                                                         )}
                                                     </div>
@@ -1403,7 +1420,7 @@
                                             )}
                                             {!isSectionCollapsed && (
                                                 <div className="px-6 py-4" onMouseUp={handleMouseUp}>
-                                                    <div className={isAdded ? 'selection:bg-amber-100' : 'selection:bg-blue-200'}>
+                                                    <div className={isAdded ? 'selection:bg-teal-200' : 'selection:bg-blue-200'}>
                                                         <MarkdownViewer content={section.content} annotations={subAnnotations || []} onMarkClick={onAnnotationClick} onMarkHover={onMarkHover} activeAnnotationId={activeAnnotationId} />
                                                     </div>
                                                 </div>
@@ -1425,10 +1442,15 @@
         };
 
         // --- テキスト注釈フォームペイン ---
-        const AnnotationFormPane = ({ mode, quote, initialData, onSave, onCancel }) => {
+        const AnnotationFormPane = ({ mode, quote, initialData, onSave, onCancel, onDisplayKindChange }) => {
             const isAdd = mode === 'add';
             const [title, setTitle] = useState(initialData?.title || '');
             const [displayKind, setDisplayKind] = useState(normalizeDisplayKind(initialData?.displayKind));
+            const handleDisplayKindChange = (nextKind) => {
+                const normalized = normalizeDisplayKind(nextKind);
+                setDisplayKind(normalized);
+                onDisplayKindChange?.(normalized);
+            };
             const [sections, setSections] = useState(() =>
                 (initialData?.sections && initialData.sections.length > 0)
                     ? initialData.sections
@@ -1457,10 +1479,10 @@
                             <label className="block text-sm font-bold text-gray-600 mb-2">タイトル <span className="text-red-500">*</span></label>
                             <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition-all bg-white shadow-sm text-gray-800" placeholder="例：この概念の具体例" autoFocus />
                         </div>
-                        <DisplayKindToggle value={displayKind} onChange={setDisplayKind} />
+                        <DisplayKindToggle value={displayKind} onChange={handleDisplayKindChange} />
                         <div className="flex flex-col gap-3">
                             <label className="block text-sm font-bold text-gray-600 flex justify-between items-center">
-                                <span>注釈本文 <span className="text-red-500">*</span></span>
+                                <span>テキスト注釈本文 <span className="text-red-500">*</span></span>
                                 <span className="text-xs text-gray-400 font-normal px-2 py-0.5 bg-gray-200 rounded">Markdown & LaTeX対応</span>
                             </label>
                             {sections.map((section, i) => (
@@ -1478,7 +1500,7 @@
                                     </div>
                                     <textarea value={section.content} onChange={e => updateSection(i, 'content', e.target.value)}
                                         className="w-full border-none p-4 focus:ring-2 focus:ring-inset focus:ring-amber-400 outline-none resize-none font-mono text-sm bg-white text-gray-700 leading-relaxed min-h-[120px]"
-                                        placeholder="注釈をマークダウン形式で記述します..." rows={5} />
+                                        placeholder="テキスト注釈をマークダウン形式で記述します..." rows={5} />
                                 </div>
                             ))}
                             <button onClick={() => addSection(sections.length - 1)} className="flex items-center justify-center gap-2 w-full py-2 border border-dashed border-amber-200 rounded-lg text-xs font-bold text-amber-400 hover:text-amber-600 hover:border-amber-400 hover:bg-amber-50 transition-colors">
@@ -1510,6 +1532,9 @@
             const [panes, setPanes] = useState([]);
             const [treeExpandedIds, setTreeExpandedIds] = useState(() => new Set());
             const [homeFocusFolder, setHomeFocusFolder] = useState(null);
+            const editorPrefs = Storage.getEditorPrefs();
+            const [preferredDisplayKind, setPreferredDisplayKind] = useState(() => normalizeDisplayKind(editorPrefs.preferredDisplayKind));
+            const [showSupplementItemsInTree, setShowSupplementItemsInTree] = useState(() => editorPrefs.showSupplementItemsInTree !== false);
             const [selectionMenu, setSelectionMenu] = useState({ show: false, top: 0, left: 0, text: '', nodeId: null, paneIndex: 0 });
             const [tooltip, setTooltip] = useState({ show: false, text: '', top: 0, left: 0 });
             const [searchOpen, setSearchOpen] = useState(false);
@@ -1541,6 +1566,9 @@
             useEffect(() => {
                 localStorage.setItem('annotator-qa-root-pane-width', String(Math.min(520, Math.max(220, rootPaneWidth))));
             }, [rootPaneWidth]);
+            useEffect(() => {
+                Storage.saveEditorPrefs({ preferredDisplayKind, showSupplementItemsInTree });
+            }, [preferredDisplayKind, showSupplementItemsInTree]);
 
             useEffect(() => {
                 const onMove = (e) => {
@@ -2014,7 +2042,7 @@
             };
 
             const handleDeleteAnnotation = (paneIndex, annotationId) => {
-                if (!confirm('この注釈を削除しますか？')) return;
+                if (!confirm('このテキスト注釈を削除しますか？')) return;
                 // 子ノードを再帰削除
                 const anno = annotations.find(a => a.id === annotationId);
                 if (anno?.childNodeIds?.length > 0) {
@@ -2424,7 +2452,7 @@
                                     <div className="w-px h-4 bg-slate-600 hidden sm:block"></div>
                                     <button className="text-sm font-bold text-amber-300 hover:text-amber-100 flex items-center gap-1.5 whitespace-nowrap"
                                         onMouseDown={(e) => { e.preventDefault(); startAnnotationAdd(selectionMenu.paneIndex, selectionMenu.nodeId, selectionMenu.parentAnnotationId, selectionMenu.text, selectionMenu.sectionId); }}>
-                                        <i className="ph-bold ph-highlighter text-lg"></i> 注釈を追加
+                                        <i className="ph-bold ph-highlighter text-lg"></i> テキスト注釈を追加
                                     </button>
                                     <button className="text-slate-500 hover:text-slate-300 ml-1" onMouseDown={(e) => { e.preventDefault(); hideSelectionMenu(); }}>
                                         <i className="ph-bold ph-x text-sm"></i>
@@ -2484,7 +2512,7 @@
                                                                 )}
                                                             </div>
                                                             <span className="text-[10px] text-gray-400 shrink-0 mt-1">
-                                                                {result.type === 'node' ? '質問' : '注釈'}
+                                                                {result.type === 'node' ? '質問' : 'テキスト注釈'}
                                                             </span>
                                                         </button>
                                                     ))}
@@ -2552,6 +2580,8 @@
                                                 onOpenSearch={isRootPane ? openSearch : null}
                                                 rootPaneWidth={rootPaneWidth}
                                                 onStartRootPaneResize={isRootPane ? startRootPaneResize : null}
+                                                showSupplementItemsInTree={isRootPane ? showSupplementItemsInTree : true}
+                                                onToggleShowSupplementItemsInTree={isRootPane ? (() => setShowSupplementItemsInTree(prev => !prev)) : null}
                                             />
                                         );
                                     }
@@ -2567,10 +2597,11 @@
                                                 isTopLevel={isTopLevel}
                                                 initialQuestion={node?.question || ''}
                                                 initialSections={node?.sections || null}
-                                                initialDisplayKind={node?.displayKind || 'core'}
+                                                initialDisplayKind={node?.displayKind || preferredDisplayKind}
                                                 breadcrumb={breadcrumb}
                                                 scrollToSectionId={pane.scrollToSectionId || null}
-                                                onSave={(q, sections, displayKind) => handleSaveNode(index, pane.type, isAdd ? pane.parentId : pane.nodeId, isAdd ? (pane.parentAnnotationId || null) : null, q, sections, displayKind)}
+                                                onSave={(q, sections, displayKind) => { setPreferredDisplayKind(normalizeDisplayKind(displayKind)); handleSaveNode(index, pane.type, isAdd ? pane.parentId : pane.nodeId, isAdd ? (pane.parentAnnotationId || null) : null, q, sections, displayKind); }}
+                                                onDisplayKindChange={setPreferredDisplayKind}
                                                 onCancel={() => {
                                                     if (isAdd) setPanes(prev => prev.slice(0, index));
                                                     else setPanes(prev => { const n = [...prev]; n[index] = { type: 'view', nodeId: pane.nodeId }; return n; });
@@ -2617,8 +2648,9 @@
                                                 key={`pane-${index}-annotation-add`}
                                                 mode="add"
                                                 quote={pane.quote}
-                                                initialData={{ displayKind: 'core' }}
-                                                onSave={(title, sections, displayKind) => saveAnnotation(index, pane.nodeId, pane.parentAnnotationId, pane.quote, title, sections, displayKind, pane.sectionId)}
+                                                initialData={{ displayKind: preferredDisplayKind }}
+                                                onSave={(title, sections, displayKind) => { setPreferredDisplayKind(normalizeDisplayKind(displayKind)); saveAnnotation(index, pane.nodeId, pane.parentAnnotationId, pane.quote, title, sections, displayKind, pane.sectionId); }}
+                                                onDisplayKindChange={setPreferredDisplayKind}
                                                 onCancel={() => setPanes(prev => prev.slice(0, index))}
                                             />
                                         );
@@ -2633,7 +2665,8 @@
                                                 mode="edit"
                                                 quote={annotation.quote}
                                                 initialData={annotation}
-                                                onSave={(title, sections, displayKind) => updateAnnotation(index, pane.annotationId, title, sections, displayKind)}
+                                                onSave={(title, sections, displayKind) => { setPreferredDisplayKind(normalizeDisplayKind(displayKind)); updateAnnotation(index, pane.annotationId, title, sections, displayKind); }}
+                                                onDisplayKindChange={setPreferredDisplayKind}
                                                 onCancel={() => setPanes(prev => { const n = [...prev]; n[index] = { type: 'annotation', annotationId: pane.annotationId }; return n; })}
                                             />
                                         );
