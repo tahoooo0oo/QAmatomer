@@ -120,6 +120,7 @@
 | `Ctrl+S` / `Cmd+S` | 現在のまとめを保存フォルダへ手動保存 |
 | `Ctrl+Z` / `Cmd+Z` | Undo |
 | `Ctrl+Shift+Z` / `Cmd+Shift+Z` | Redo |
+| `Shift+↑` / `Shift+↓` | 同じ親ノード配下の前 / 次のノードへ移動 |
 | `Escape` | 検索・選択メニューを閉じる |
 
 ## エクスポート形式

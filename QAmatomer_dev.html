@@ -1845,15 +1845,30 @@
                     // 矢印キーナビゲーション（テキスト編集中・検索中は無効）
                     if (!isEditable && !searchOpen && appMode === 'workspace'
                         && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) {
-                        // 非ルートペインが1つ以上ある場合のみ介入（root=index0はスキップ）
-                        const nonRootPanes = panes.filter((p, i) => i > 0 && p.type === 'view');
-                        if (nonRootPanes.length === 0) return;
-                        e.preventDefault();
+                        const viewPanes = panes.filter(p => p.type === 'view');
+                        if (viewPanes.length === 0) return;
                         // フォーカス中の列インデックス（デフォルト: 最後のviewペイン）
-                        const lastViewIdx = panes.reduce((acc, p, i) => (i > 0 && p.type === 'view' ? i : acc), -1);
-                        const focusedIdx = (keyNavPaneIndex !== null && keyNavPaneIndex >= 1 && panes[keyNavPaneIndex]?.type === 'view')
+                        const lastViewIdx = panes.reduce((acc, p, i) => (p.type === 'view' ? i : acc), -1);
+                        const focusedIdx = (keyNavPaneIndex !== null && keyNavPaneIndex >= 0 && panes[keyNavPaneIndex]?.type === 'view')
                             ? keyNavPaneIndex : lastViewIdx;
                         const focusedPane = panes[focusedIdx];
+                        if (!focusedPane?.nodeId) return;
+                        if (e.shiftKey && ['ArrowUp', 'ArrowDown'].includes(e.key)) {
+                            const currentNode = nodes[focusedPane.nodeId];
+                            const parentNode = currentNode?.parentId ? nodes[currentNode.parentId] : null;
+                            const currentIndex = parentNode ? parentNode.children.indexOf(currentNode.id) : -1;
+                            const siblingId = currentIndex === -1 ? null : parentNode.children[currentIndex + (e.key === 'ArrowDown' ? 1 : -1)];
+                            if (siblingId && nodes[siblingId]) {
+                                const path = buildAncestryPath(siblingId);
+                                e.preventDefault();
+                                setTreeExpandedIds(prev => { const next = new Set(prev); path.forEach(id => next.add(id)); return next; });
+                                setPanes([{ type: 'view', nodeId: 'root' }, ...path.map(id => ({ type: 'view', nodeId: id }))]);
+                                setKeyNavPaneIndex(path.length);
+                                setKeyNavChildId(null);
+                            }
+                            return;
+                        }
+                        e.preventDefault();
                         const activeNode = nodes[focusedPane?.nodeId];
                         const children = activeNode ? activeNode.children.map(id => nodes[id]).filter(Boolean) : [];
                         if (e.key === 'ArrowDown') {
@@ -1881,7 +1896,7 @@
                                 setKeyNavChildId(null);
                             }
                         } else if (e.key === 'ArrowLeft') {
-                            if (focusedIdx > 1) {
+                            if (focusedIdx > 0) {
                                 // 左の列にフォーカス移動し、今いた列のノードをハイライト
                                 const prevIdx = focusedIdx - 1;
                                 const currentNodeId = focusedPane?.nodeId;
