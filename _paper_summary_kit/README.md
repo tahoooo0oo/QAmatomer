@@ -220,7 +220,7 @@ leaf の中では、必要に応じて次を section として並べてよい。
               "content": "下の section node をどう読むかを書く。"
             }
           ],
-          "children": ["background", "core", "guide"]
+          "children": ["background", "core", "qa", "guide"]
         },
         "background": {
           "id": "background",
@@ -296,6 +296,19 @@ leaf の中では、必要に応じて次を section として並べてよい。
               "id": "example-s1",
               "title": "例",
               "content": "代表例や応用例を書く。"
+            }
+          ],
+          "children": []
+        },
+        "qa": {
+          "id": "qa",
+          "parentId": "root",
+          "question": "追加の質問と回答",
+          "sections": [
+            {
+              "id": "qa-s1",
+              "title": "概観",
+              "content": "このまとめに対して後から寄せられた質問と回答を収録する。"
             }
           ],
           "children": []

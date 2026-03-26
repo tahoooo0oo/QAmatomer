@@ -31,6 +31,9 @@ root
 ├── section node B
 │   ├── leaf B-1
 │   └── leaf B-2
+├── qa
+│   ├── qa-1
+│   └── qa-2
 └── guide
 ```
 
@@ -42,6 +45,12 @@ root
   - 大きなまとまりごとの概観を書く
 - `leaf node`
   - 実際の中身を書く
+- `qa`
+  - 追加の質問と回答を収録する section node
+  - `guide` の手前に置く
+  - children には質問ごとに leaf を 1 つ置く
+  - leaf の `question` フィールドに質問文を、`sections` に回答を書く
+  - 最初は `children: []` のまま出力する
 
 ## root に必ず入れること
 
@@ -199,7 +208,7 @@ $f \\colon X \\to Y$ は $X$ から $Y$ への写像で、$A \\to B$ をみた�
               "content": "下の section node をどう読むかを書く。"
             }
           ],
-          "children": ["background", "core", "guide"]
+          "children": ["background", "core", "qa", "guide"]
         },
         "background": {
           "id": "background",
@@ -279,6 +288,19 @@ $f \\colon X \\to Y$ は $X$ から $Y$ への写像で、$A \\to B$ をみた�
           ],
           "children": []
         },
+        "qa": {
+          "id": "qa",
+          "parentId": "root",
+          "question": "追加の質問と回答",
+          "sections": [
+            {
+              "id": "qa-s1",
+              "title": "概観",
+              "content": "このまとめに対して後から寄せられた質問と回答を収録する。"
+            }
+          ],
+          "children": []
+        },
         "guide": {
           "id": "guide",
           "parentId": "root",
@@ -309,6 +331,7 @@ $f \\colon X \\to Y$ は $X$ から $Y$ への写像で、$A \\to B$ をみた�
 - `projects[0].annotations` は `[]`
 - ツリーは `root -> section node -> leaf node` の 2 段階構成
 - leaf の下に子ノードを作らない
+- `qa` ノードを `guide` の手前に必ず置く。最初は `children: []` にする
 - `guide` は root 直下で子なしでもよい
 - section node の概観は見出しの言い換えで済ませず、比較表・関係図・模式図・因果の流れなどを使って、その節の核心が先に見えるようにする
 - source 由来の情報と要約・整理・推測を混同しない
