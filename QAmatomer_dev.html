@@ -991,7 +991,7 @@
         };
 
         // --- ViewPane ---
-        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, onMoveNode, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId, onOpenSearch, rootPaneWidth, onStartRootPaneResize, showSupplementItemsInTree, onToggleShowSupplementItemsInTree }) => {
+        const ViewPane = ({ node, isRoot, breadcrumb, isActive, selectedChildId, nodeAnnotations, activeAnnotationId, onAnnotateText, onAnnotationClick, onMarkHover, onHideSelectionMenu, onEdit, onDelete, onClose, onAddChild, onAddSection, onOpenChild, onMoveNode, allNodes, allAnnotations, treeExpandedIds, onTreeToggle, onTreeExpand, onTreeExpandAll, onTreeCollapseAll, onTreeSelectNode, onTreeSelectAnnotation, treeActiveNodeIds, treeActiveAnnotationId, onOpenSearch, onReplaceCurrentProject, rootPaneWidth, onStartRootPaneResize, showSupplementItemsInTree, onToggleShowSupplementItemsInTree }) => {
             const [listCollapsed, setListCollapsed] = useState(!isRoot);
             const [collapsedSections, setCollapsedSections] = useState(new Set());
             const toggleSection = (sectionId) => setCollapsedSections(prev => { const next = new Set(prev); next.has(sectionId) ? next.delete(sectionId) : next.add(sectionId); return next; });
@@ -1071,11 +1071,22 @@
                     <div className={`p-4 border-b flex items-start justify-between shrink-0 shadow-sm z-10 ${isAdded ? 'border-teal-200 bg-teal-100/80' : 'border-gray-100 bg-white'}`}>
                         <div className="flex items-start gap-3 overflow-hidden flex-1">
                             <i className={`ph-fill ${isRoot ? 'ph-folders text-indigo-500' : (isAdded ? 'ph-question text-teal-600' : 'ph-question text-blue-500')} text-2xl shrink-0 mt-0.5`}></i>
-                            <h2 className={`font-bold leading-snug ${isRoot ? 'text-xl text-gray-800' : (isAdded ? 'text-lg text-teal-950' : 'text-lg text-gray-800')}`}><InlineTitle text={node.topic} /></h2>
+                            <h2
+                                className={`font-bold min-w-0 flex-1 ${isRoot ? 'text-lg md:text-xl text-gray-800 leading-tight' : (isAdded ? 'text-lg text-teal-950 leading-snug' : 'text-lg text-gray-800 leading-snug')}`}
+                                style={isRoot ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : undefined}
+                                title={node.topic}
+                            >
+                                <InlineTitle text={node.topic} className="break-words" />
+                            </h2>
                         </div>
                         <div className="flex items-center gap-1 shrink-0 ml-2">
                             {isRoot && onOpenSearch && (
                                 <button onClick={onOpenSearch} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors" title="全文検索 (Ctrl+K)"><i className="ph ph-magnifying-glass text-lg"></i></button>
+                            )}
+                            {isRoot && onReplaceCurrentProject && (
+                                <button onClick={onReplaceCurrentProject} className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-cyan-700 hover:bg-cyan-100 transition-colors" title="JSONで現在のまとめを置換">
+                                    <i className="ph ph-upload-simple text-lg"></i>
+                                </button>
                             )}
                             <button onClick={onAddChild} className="px-2.5 py-1.5 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 hover:border-blue-300 transition-colors flex items-center gap-1" title="質問を追加">
                                 <i className="ph-bold ph-plus text-xs"></i><span className="hidden sm:inline">追加</span>
@@ -1657,6 +1668,7 @@
             const searchInputRef = useRef(null);
             const scrollContainerRef = useRef(null);
             const saveDirHandleRef = useRef(null);
+            const workspaceImportInputRef = useRef(null);
             const rootResizeActiveRef = useRef(false);
             const rootResizeStartXRef = useRef(0);
             const rootResizeStartWidthRef = useRef(300);
@@ -2484,6 +2496,70 @@
                 return importProjectPayloads(dataList, { forceCategory: category });
             };
 
+            const replaceCurrentProjectWithImportTarget = (proj) => {
+                if (!currentProjectId) return false;
+                const currentMeta = projectList.find(p => p.id === currentProjectId);
+                if (!currentMeta) return false;
+
+                const migratedNodes = migrateNodes(normalizeImportNodes(proj));
+                const migratedAnnotations = migrateAnnotations(Array.isArray(proj.annotations) ? proj.annotations : []);
+                const now = Date.now();
+                const nextMeta = {
+                    ...currentMeta,
+                    name: proj.name || currentMeta.name || '名前なし',
+                    category: proj.category || currentMeta.category || '未分類',
+                    createdAt: proj.createdAt || currentMeta.createdAt || now,
+                    updatedAt: now,
+                    nodeCount: Object.keys(migratedNodes).length,
+                    annotationCount: migratedAnnotations.length,
+                    preview: migratedNodes?.root?.sections?.[0]?.content?.substring(0, 100) || ''
+                };
+
+                if (!confirm(`現在開いている「${currentMeta.name || '名前なし'}」を、読み込んだJSONの内容で完全に置き換えます。よろしいですか？`)) {
+                    return false;
+                }
+
+                const nextList = projectList.map(p => p.id === currentProjectId ? nextMeta : p);
+                Storage.saveProjectData(currentProjectId, { nodes: migratedNodes, annotations: migratedAnnotations });
+                Storage.saveProjectList(nextList);
+                setProjectList(nextList);
+                setCurrentProjectName(nextMeta.name);
+                setCurrentProjectCategory(nextMeta.category);
+                setNodes(migratedNodes);
+                setAnnotations(migratedAnnotations);
+                setTreeExpandedIds(new Set(Object.keys(migratedNodes).filter(k => k !== 'root')));
+                setPanes([{ type: 'view', nodeId: 'root' }]);
+                resetHistory();
+                alert('現在のまとめをJSONで置き換えました。');
+                return true;
+            };
+
+            const importIntoCurrentProject = (payload) => {
+                const targets = extractImportTargets(payload);
+                if (!targets || targets.length === 0) {
+                    alert('有効なJSONデータが見つかりませんでした。');
+                    return false;
+                }
+                if (targets.length > 1 && !confirm(`このJSONには ${targets.length} 件の project が含まれています。先頭の 1 件で現在のまとめを置き換えますか？`)) {
+                    return false;
+                }
+                return replaceCurrentProjectWithImportTarget(targets[0]);
+            };
+
+            const handleWorkspaceImportChange = async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (!file) return;
+                try {
+                    const raw = await file.text();
+                    const data = JSON.parse((raw || '').replace(/^\uFEFF/, ''));
+                    importIntoCurrentProject(data);
+                } catch (err) {
+                    console.error(err);
+                    alert('JSONファイルを読み込めませんでした。');
+                }
+            };
+
             const syncImportFromFolder = (category, payloads) => {
                 if (!category || category === 'ALL') {
                     alert('同期先フォルダを選択してください。');
@@ -2539,6 +2615,7 @@
             // --- レンダリング ---
             return (
                 <div className="flex flex-col h-screen w-full bg-gray-50 overflow-hidden font-sans text-gray-900">
+                    <input ref={workspaceImportInputRef} type="file" accept=".json" onChange={handleWorkspaceImportChange} className="hidden" />
                     <header className="h-14 bg-slate-900 text-white flex items-center px-6 shrink-0 z-30 shadow-md">
                         <div className="flex items-center gap-3">
                             <div className="bg-blue-500 p-1.5 rounded text-white flex items-center justify-center shadow-lg shadow-blue-500/30 cursor-pointer hover:bg-blue-400 transition-colors" onClick={goHome} title="ホームに戻る">
@@ -2718,6 +2795,7 @@
                                                 treeActiveNodeIds={treeActiveNodeIds}
                                                 treeActiveAnnotationId={treeActiveAnnotationId}
                                                 onOpenSearch={isRootPane ? openSearch : null}
+                                                onReplaceCurrentProject={isRootPane ? (() => workspaceImportInputRef.current?.click()) : null}
                                                 rootPaneWidth={rootPaneWidth}
                                                 onStartRootPaneResize={isRootPane ? startRootPaneResize : null}
                                                 showSupplementItemsInTree={isRootPane ? showSupplementItemsInTree : true}
