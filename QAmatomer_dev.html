@@ -126,6 +126,7 @@
         };
 
         const normalizeDisplayKind = (value) => value === 'added' ? 'added' : 'core';
+        const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
         const isAddedDisplayKind = (value) => normalizeDisplayKind(value) === 'added';
         const DisplayKindToggle = ({ value, onChange }) => {
             const normalized = normalizeDisplayKind(value);
@@ -480,11 +481,35 @@
             const [viewMode, setViewMode] = useState('TREE');
             const [sortMode, setSortMode] = useState(() => Storage.getHomeListPrefs().sortMode || 'CREATED_ASC');
             const [newFolderName, setNewFolderName] = useState('');
+            const [rawImportModal, setRawImportModal] = useState({ open: false, text: '', targetFolder: null });
             const multiFileInputRef = useRef(null);
             const folderFileInputRef = useRef(null);
             const syncFolderInputRef = useRef(null);
             const folderImportInputRef = useRef(null);
             const normalizeFolder = (category) => (category || '未分類');
+            const closeRawImportModal = () => setRawImportModal({ open: false, text: '', targetFolder: null });
+            const openRawImportModal = (targetFolder = null) => setRawImportModal({ open: true, text: '', targetFolder });
+            const parseJsonText = (input) => {
+                const candidates = [];
+                const pushCandidate = (candidate) => {
+                    const normalized = (candidate || '').trim().replace(/^\uFEFF/, '');
+                    if (!normalized || candidates.includes(normalized)) return;
+                    candidates.push(normalized);
+                };
+                const trimmed = (input || '').trim();
+                pushCandidate(trimmed);
+                const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+                let match;
+                while ((match = fenceRegex.exec(trimmed)) !== null) {
+                    pushCandidate(match[1]);
+                }
+                for (const candidate of candidates) {
+                    try {
+                        return JSON.parse(candidate);
+                    } catch (err) {}
+                }
+                return null;
+            };
             const parseJsonFile = async (file) => {
                 try {
                     const text = await file.text();
@@ -522,6 +547,17 @@
                 const parsedList = (await Promise.all(files.map(parseJsonFile))).filter(Boolean);
                 if (parsedList.length === 0) { alert('有効なJSONファイルを読み込めませんでした。'); e.target.value = ''; return; }
                 onImportFilesToFolder(selectedFolder, parsedList); e.target.value = '';
+            };
+            const handleRawImportSubmit = () => {
+                const parsed = parseJsonText(rawImportModal.text);
+                if (!parsed) {
+                    alert('JSONコードを読み込めませんでした。```json ... ``` のまま貼り付けても大丈夫です。');
+                    return;
+                }
+                const didImport = rawImportModal.targetFolder
+                    ? onImportFilesToFolder(rawImportModal.targetFolder, [parsed])
+                    : onImportFiles([parsed]);
+                if (didImport !== false) closeRawImportModal();
             };
             const folderStats = projects.reduce((acc, p) => {
                 const folder = normalizeFolder(p.category);
@@ -590,6 +626,7 @@
             );
 
             return (
+                <>
                 <div className="flex-1 overflow-y-auto bg-gray-50">
                     <div className="max-w-6xl mx-auto px-6 py-10 animate-fade-in-up">
                         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
@@ -600,6 +637,9 @@
                             <div className="flex items-center gap-3 flex-wrap justify-end">
                                 <button onClick={() => multiFileInputRef.current?.click()} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
                                     <i className="ph-bold ph-files"></i> インポート
+                                </button>
+                                <button onClick={() => openRawImportModal()} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors" title="JSONコードを貼り付けてインポート">
+                                    <i className="ph-bold ph-code"></i> JSON貼り付け
                                 </button>
                                 <button onClick={() => folderFileInputRef.current?.click()} className="px-4 py-2.5 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-sm flex items-center gap-2 transition-colors">
                                     <i className="ph-bold ph-folder-open"></i> フォルダ読込
@@ -720,6 +760,9 @@
                                                 <button onClick={() => folderImportInputRef.current?.click()} className="group relative w-10 h-9 text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 font-medium text-sm flex items-center justify-center transition-colors" title="このフォルダにインポート">
                                                     <i className="ph-bold ph-upload-simple text-base"></i><span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 px-2 py-1 rounded-md bg-slate-800 text-white text-xs whitespace-nowrap opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 pointer-events-none transition-all duration-150 z-30">このフォルダにインポート</span>
                                                 </button>
+                                                <button onClick={() => openRawImportModal(selectedFolder)} className="group relative w-10 h-9 text-cyan-700 bg-cyan-50 border border-cyan-200 rounded-lg hover:bg-cyan-100 font-medium text-sm flex items-center justify-center transition-colors" title="このフォルダにJSON貼り付け">
+                                                    <i className="ph-bold ph-code text-base"></i><span className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1 px-2 py-1 rounded-md bg-slate-800 text-white text-xs whitespace-nowrap opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 pointer-events-none transition-all duration-150 z-30">このフォルダにJSON貼り付け</span>
+                                                </button>
                                                 <button onClick={() => {
                                                     if (!confirm('「' + selectedFolder + '」フォルダを削除しますか？\nフォルダ内ページは「未分類」に移動します。')) return;
                                                     onDeleteFolder(selectedFolder);
@@ -746,6 +789,41 @@
                         )}
                     </div>
                 </div>
+                {rawImportModal.open && (
+                    <div className="fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-[1px] flex items-center justify-center p-4">
+                        <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+                            <div className="px-6 py-5 border-b border-slate-200 flex items-start justify-between gap-3">
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-800">{rawImportModal.targetFolder ? `「${rawImportModal.targetFolder}」にJSONをインポート` : 'JSONコードをインポート'}</h3>
+                                    <p className="text-sm text-slate-500 mt-1">AIが返した `json` コードブロックや、生のJSON本文をそのまま貼り付けて取り込めます。</p>
+                                </div>
+                                <button onClick={closeRawImportModal} className="w-9 h-9 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors shrink-0" title="閉じる">
+                                    <i className="ph-bold ph-x text-lg"></i>
+                                </button>
+                            </div>
+                            <div className="p-6">
+                                <textarea
+                                    value={rawImportModal.text}
+                                    onChange={e => setRawImportModal(prev => ({ ...prev, text: e.target.value }))}
+                                    onKeyDown={e => {
+                                        if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') handleRawImportSubmit();
+                                    }}
+                                    className="w-full min-h-[320px] border border-slate-300 rounded-xl px-4 py-3 font-mono text-sm text-slate-700 focus:ring-2 focus:ring-cyan-500 focus:border-transparent outline-none resize-y"
+                                    placeholder={`例:\n\`\`\`json\n{\n  "type": "annotator-qa-export",\n  "projects": [ ... ]\n}\n\`\`\`\n\nまたは単体プロジェクトJSONをそのまま貼り付け`}
+                                    autoFocus
+                                />
+                                <p className="text-xs text-slate-500 mt-3">対応形式: エクスポートJSON / 手動保存JSON / 単体プロジェクトJSON / プロジェクト配列</p>
+                            </div>
+                            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3">
+                                <button onClick={closeRawImportModal} className="px-5 py-2.5 rounded-lg font-bold text-slate-600 hover:bg-slate-200/70 transition-colors">キャンセル</button>
+                                <button onClick={handleRawImportSubmit} className="px-5 py-2.5 rounded-lg font-bold text-white bg-cyan-600 hover:bg-cyan-700 transition-colors shadow-sm flex items-center gap-2">
+                                    <i className="ph-bold ph-upload-simple"></i> 取り込む
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                </>
             );
         };
 
@@ -2301,11 +2379,20 @@
             const exportAllProjects = () => doExport(projectList.map(p => p.id));
             const exportSingleProject = (id) => doExport([id]);
 
+            const isImportableProject = (value) => isPlainObject(value) && isPlainObject(value.nodes) && isPlainObject(value.nodes.root);
+            const normalizeImportTargets = (list) => {
+                const targets = (Array.isArray(list) ? list : []).filter(isImportableProject);
+                return targets.length > 0 ? targets : null;
+            };
             const extractImportTargets = (data) => {
-                if (!data || !data.type) return null;
-                if (data.type === 'annotator-qa-export' && Array.isArray(data.projects)) return data.projects;
-                if (data.type === 'annotator-qa-project-file' && data.project) return [data.project];
-                return null;
+                if (Array.isArray(data)) {
+                    const targets = data.flatMap(item => extractImportTargets(item) || []);
+                    return targets.length > 0 ? targets : null;
+                }
+                if (!isPlainObject(data)) return null;
+                if (data.type === 'annotator-qa-export') return normalizeImportTargets(data.projects);
+                if (data.type === 'annotator-qa-project-file') return normalizeImportTargets([data.project]);
+                return normalizeImportTargets(data.projects) || normalizeImportTargets([data.project]) || normalizeImportTargets([data]);
             };
 
             const importProjectPayloads = (payloads, opts = {}) => {
@@ -2318,8 +2405,8 @@
                     else targets.push(...arr);
                 });
                 if (targets.length === 0) {
-                    alert('有効なファイル形式が見つかりませんでした。');
-                    return;
+                    alert('有効なJSONデータが見つかりませんでした。');
+                    return false;
                 }
 
                 if (replaceAll) {
@@ -2329,8 +2416,8 @@
                 let count = 0;
                 targets.forEach(proj => {
                     const id = generateId(); const now = Date.now();
-                    const migratedNodes = migrateNodes(proj.nodes || {});
-                    const migratedAnnotations = migrateAnnotations(proj.annotations || []);
+                    const migratedNodes = migrateNodes(isPlainObject(proj.nodes) ? proj.nodes : {});
+                    const migratedAnnotations = migrateAnnotations(Array.isArray(proj.annotations) ? proj.annotations : []);
                     const manualOrder = newList.reduce((max, p) => Math.max(max, Number.isFinite(p.manualOrder) ? p.manualOrder : 0), -1) + 1;
                     newList.unshift({
                         id,
@@ -2348,15 +2435,16 @@
                 });
                 Storage.saveProjectList(newList); setProjectList(newList);
                 alert(count + ' 件のまとめをインポートしました。' + (invalidCount > 0 ? `（${invalidCount}件は形式不正でスキップ）` : ''));
+                return true;
             };
 
             const importProjectFiles = (dataList) => importProjectPayloads(dataList);
             const importProjectFilesToFolder = (category, dataList) => {
                 if (!category || category === 'ALL') {
                     alert('インポート先フォルダを選択してください。');
-                    return;
+                    return false;
                 }
-                importProjectPayloads(dataList, { forceCategory: category });
+                return importProjectPayloads(dataList, { forceCategory: category });
             };
 
             const syncImportFromFolder = (category, payloads) => {
@@ -2385,8 +2473,8 @@
                 let count = 0;
                 targets.forEach(proj => {
                     const id = generateId(); const now = Date.now();
-                    const migratedNodes = migrateNodes(proj.nodes || {});
-                    const migratedAnnotations = migrateAnnotations(proj.annotations || []);
+                    const migratedNodes = migrateNodes(isPlainObject(proj.nodes) ? proj.nodes : {});
+                    const migratedAnnotations = migrateAnnotations(Array.isArray(proj.annotations) ? proj.annotations : []);
                     const manualOrder = newList.reduce((max, p) => Math.max(max, Number.isFinite(p.manualOrder) ? p.manualOrder : 0), -1) + 1;
                     newList.unshift({
                         id,
