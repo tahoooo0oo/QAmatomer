@@ -154,11 +154,44 @@
         };
 
         const migrateNode = (node) => {
-            if (node.sections) return { ...node, displayKind: normalizeDisplayKind(node.displayKind) };
-            const { answer, group, ...rest } = node;
-            return { ...rest, displayKind: normalizeDisplayKind(node.displayKind), sections: [{ id: generateId(), title: '', content: answer || '' }] };
+            // rename question → topic for backwards compatibility
+            const n = (node.topic === undefined && node.question !== undefined)
+                ? (({ question, ...r }) => ({ ...r, topic: question }))(node)
+                : node;
+            if (n.sections) return { ...n, displayKind: normalizeDisplayKind(n.displayKind) };
+            const { answer, group, ...rest } = n;
+            return { ...rest, displayKind: normalizeDisplayKind(n.displayKind), sections: [{ id: generateId(), title: '', content: answer || '' }] };
         };
         const migrateNodes = (nodesObj) => Object.fromEntries(Object.entries(nodesObj).map(([k, v]) => [k, migrateNode(v)]));
+
+        // ファイル形式変換：辞書 → 配列（エクスポート用）
+        const nodesToArray = (nodesDict) => {
+            const result = [];
+            const visited = new Set();
+            const visit = (id) => {
+                if (visited.has(id)) return;
+                visited.add(id);
+                const node = nodesDict[id];
+                if (!node) return;
+                const { children, ...rest } = node;
+                result.push(rest);
+                (children || []).forEach(visit);
+            };
+            visit('root');
+            Object.keys(nodesDict).forEach(id => { if (!visited.has(id)) { const { children, ...rest } = nodesDict[id]; result.push(rest); } });
+            return result;
+        };
+
+        // ファイル形式変換：配列 → 辞書（インポート用）
+        const arrayToNodes = (arr) => {
+            const dict = {};
+            arr.forEach(node => { dict[node.id] = { ...node, children: [] }; });
+            arr.forEach(node => { if (node.parentId && dict[node.parentId]) dict[node.parentId].children.push(node.id); });
+            return dict;
+        };
+
+        const normalizeImportNodes = (proj) =>
+            Array.isArray(proj.nodes) ? arrayToNodes(proj.nodes) : (isPlainObject(proj.nodes) ? proj.nodes : {});
         const migrateAnnotation = (a) => {
             if (a.sections) return { ...a, displayKind: normalizeDisplayKind(a.displayKind) };
             return { ...a, displayKind: normalizeDisplayKind(a.displayKind), sections: [{ id: generateId(), title: '', content: a.content || '' }] };
@@ -921,7 +954,7 @@
                             {hasItems && <i className={`ph-bold ph-caret-${isExpanded ? 'down' : 'right'} text-[9px] ${isActive ? 'text-blue-500' : 'text-gray-400'}`}></i>}
                         </span>
                         <i className={`ph-fill ph-question text-[10px] shrink-0 ${isActive ? (isAdded ? 'text-teal-700' : 'text-blue-600') : (isAdded ? 'text-teal-500' : 'text-gray-300')}`}></i>
-                        <InlineTitle text={node.question} className="truncate leading-snug flex-1 min-w-0" />
+                        <InlineTitle text={node.topic} className="truncate leading-snug flex-1 min-w-0" />
                         {onMoveNode && node.parentId && (
                             <span className="flex gap-0.5 opacity-0 group-hover/treerow:opacity-100 transition-opacity shrink-0 ml-1" onClick={e => e.stopPropagation()}>
                                 <button onClick={() => onMoveNode(node.id, -1)} title="上へ" className="w-4 h-4 flex items-center justify-center rounded hover:bg-gray-300 text-gray-400 hover:text-gray-700"><i className="ph-bold ph-arrow-up text-[8px]"></i></button>
@@ -1004,7 +1037,7 @@
                     <div key={childNode.id} data-keynav={childNode.id} onClick={() => onOpenChild(childNode.id)} className={`px-3 py-2 rounded-lg border transition-all cursor-pointer group ${isChildSelected ? (isAddedChild ? 'border-teal-500 bg-teal-100 ring-2 ring-teal-100 shadow-sm' : 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-sm') : (isAddedChild ? 'bg-teal-100/90 border-teal-300 hover:border-teal-400 hover:shadow-sm' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-sm')}`}>
                         <div className="font-medium text-gray-800 flex items-center gap-2 text-sm">
                             <i className={`ph-fill ph-question shrink-0 text-sm ${isChildSelected ? (isAddedChild ? 'text-teal-700' : 'text-blue-600') : (isAddedChild ? 'text-teal-500 group-hover:text-teal-600 transition-colors' : 'text-gray-300 group-hover:text-blue-400 transition-colors')}`}></i>
-                            <InlineTitle text={childNode.question} className="leading-snug flex-1 min-w-0" />
+                            <InlineTitle text={childNode.topic} className="leading-snug flex-1 min-w-0" />
                             {onMoveNode && (
                                 <span className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={e => e.stopPropagation()}>
                                     <button onClick={() => onMoveNode(childNode.id, -1)} title="上へ" className="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-200 text-gray-400 hover:text-gray-700"><i className="ph-bold ph-arrow-up text-[10px]"></i></button>
@@ -1038,7 +1071,7 @@
                     <div className={`p-4 border-b flex items-start justify-between shrink-0 shadow-sm z-10 ${isAdded ? 'border-teal-200 bg-teal-100/80' : 'border-gray-100 bg-white'}`}>
                         <div className="flex items-start gap-3 overflow-hidden flex-1">
                             <i className={`ph-fill ${isRoot ? 'ph-folders text-indigo-500' : (isAdded ? 'ph-question text-teal-600' : 'ph-question text-blue-500')} text-2xl shrink-0 mt-0.5`}></i>
-                            <h2 className={`font-bold leading-snug ${isRoot ? 'text-xl text-gray-800' : (isAdded ? 'text-lg text-teal-950' : 'text-lg text-gray-800')}`}><InlineTitle text={node.question} /></h2>
+                            <h2 className={`font-bold leading-snug ${isRoot ? 'text-xl text-gray-800' : (isAdded ? 'text-lg text-teal-950' : 'text-lg text-gray-800')}`}><InlineTitle text={node.topic} /></h2>
                         </div>
                         <div className="flex items-center gap-1 shrink-0 ml-2">
                             {isRoot && onOpenSearch && (
@@ -1229,9 +1262,9 @@
 
 
         // --- Q&A編集ペイン ---
-        const EditPane = ({ mode, isTopLevel, initialQuestion, initialSections, initialDisplayKind, breadcrumb, onSave, onCancel, scrollToSectionId, onDisplayKindChange }) => {
+        const EditPane = ({ mode, isTopLevel, initialTopic, initialSections, initialDisplayKind, breadcrumb, onSave, onCancel, scrollToSectionId, onDisplayKindChange }) => {
             const isAdd = mode === 'add';
-            const [question, setQuestion] = useState(initialQuestion || '');
+            const [topic, setTopic] = useState(initialTopic || '');
             const [displayKind, setDisplayKind] = useState(normalizeDisplayKind(initialDisplayKind));
             const handleDisplayKindChange = (nextKind) => {
                 const normalized = normalizeDisplayKind(nextKind);
@@ -1281,9 +1314,9 @@
                     <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
                         <div>
                             <label className="block text-sm font-bold text-gray-600 mb-2 flex items-center gap-1">
-                                <i className="ph-fill ph-question text-blue-500"></i> 質問 <span className="text-red-500">*</span>
+                                <i className="ph-fill ph-question text-blue-500"></i> トピック <span className="text-red-500">*</span>
                             </label>
-                            <input type="text" value={question} onChange={e => setQuestion(e.target.value)} className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white shadow-sm font-bold text-gray-800" placeholder={isTopLevel ? "例：React Hooksとは何ですか？" : "例：なぜその技術が必要なのですか？"} />
+                            <input type="text" value={topic} onChange={e => setTopic(e.target.value)} className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all bg-white shadow-sm font-bold text-gray-800" placeholder={isTopLevel ? "例：React Hooksとは何か" : "例：なぜその技術が必要なのか"} />
                         </div>
                         <DisplayKindToggle value={displayKind} onChange={handleDisplayKindChange} />
                         <div className="flex flex-col gap-3">
@@ -1324,7 +1357,7 @@
                     </div>
                     <div className="p-4 border-t border-gray-200 bg-white flex justify-end gap-3 shrink-0">
                         <button onClick={onCancel} className="px-6 py-2.5 rounded-lg font-bold text-gray-600 hover:bg-gray-100 transition-colors">キャンセル</button>
-                        <button onClick={() => onSave(question, sections, displayKind)} disabled={!question.trim()} className="px-6 py-2.5 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-sm">
+                        <button onClick={() => onSave(topic, sections, displayKind)} disabled={!topic.trim()} className="px-6 py-2.5 rounded-lg font-bold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2 shadow-sm">
                             <i className="ph-bold ph-check"></i> 保存
                         </button>
                     </div>
@@ -1362,7 +1395,7 @@
                     <div key={childNode.id} data-keynav={childNode.id} onClick={() => onOpenChild(childNode.id)} className={`px-3 py-2 rounded-lg border transition-all cursor-pointer group ${isChildSelected ? (isAddedChild ? 'border-teal-500 bg-teal-100 ring-2 ring-teal-100 shadow-sm' : 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-sm') : (isAddedChild ? 'bg-teal-100/90 border-teal-300 hover:border-teal-400 hover:shadow-sm' : 'bg-white border-gray-200 hover:border-blue-300 hover:shadow-sm')}`}>
                         <div className="font-medium text-gray-800 flex items-start gap-2 text-sm">
                             <i className={`ph-fill ph-question mt-0.5 shrink-0 text-sm ${isChildSelected ? (isAddedChild ? 'text-teal-700' : 'text-blue-600') : (isAddedChild ? 'text-teal-500 group-hover:text-teal-600 transition-colors' : 'text-gray-300 group-hover:text-blue-400 transition-colors')}`}></i>
-                            <InlineTitle text={childNode.question} className="leading-snug flex-1 min-w-0" />
+                            <InlineTitle text={childNode.topic} className="leading-snug flex-1 min-w-0" />
                         </div>
                     </div>
                 );
@@ -1861,16 +1894,16 @@
                 const results = [];
                 // Search nodes
                 Object.values(nodes).filter(n => n.id !== 'root').forEach(n => {
-                    if (n.question.toLowerCase().includes(ql)) {
-                        results.push({ type: 'node', id: n.id, title: n.question, snippet: getSnippet(n.question, q), matchIn: 'question' });
+                    if (n.topic.toLowerCase().includes(ql)) {
+                        results.push({ type: 'node', id: n.id, title: n.topic, snippet: getSnippet(n.topic, q), matchIn: 'topic' });
                     }
                     if (n.sections) {
                         n.sections.forEach(s => {
                             if (s.title && s.title.toLowerCase().includes(ql)) {
-                                results.push({ type: 'node', id: n.id, title: n.question, snippet: getSnippet(s.title, q), matchIn: 'sectionTitle' });
+                                results.push({ type: 'node', id: n.id, title: n.topic, snippet: getSnippet(s.title, q), matchIn: 'sectionTitle' });
                             }
                             if (s.content && s.content.toLowerCase().includes(ql)) {
-                                results.push({ type: 'node', id: n.id, title: n.question, snippet: getSnippet(s.content, q), matchIn: 'sectionContent' });
+                                results.push({ type: 'node', id: n.id, title: n.topic, snippet: getSnippet(s.content, q), matchIn: 'sectionContent' });
                             }
                         });
                     }
@@ -2038,9 +2071,9 @@
                     const manualOrder = projectList.reduce((max, p) => Math.max(max, Number.isFinite(p.manualOrder) ? p.manualOrder : 0), -1) + 1;
                     const newProject = { id, name, category, createdAt: now, updatedAt: now, manualOrder, nodeCount: 1, annotationCount: 0, preview: '質問一覧から展開して確認してください。' };
                     setProjectList(prev => { const u = [newProject, ...prev]; Storage.saveProjectList(u); return u; });
-                    newNodes = { root: { id: 'root', parentId: null, question: name, displayKind: 'core', sections: [{ id: generateId(), title: '', content: '' }], children: [] } };
+                    newNodes = { root: { id: 'root', parentId: null, topic: name, displayKind: 'core', sections: [{ id: generateId(), title: '', content: '' }], children: [] } };
                 } else {
-                    newNodes['root'] = { ...newNodes['root'], question: name };
+                    newNodes['root'] = { ...newNodes['root'], topic: name };
                 }
                 setCurrentProjectId(id); setCurrentProjectName(name); setCurrentProjectCategory(category); setNodes(newNodes);
                 Storage.saveProjectData(id, { nodes: newNodes, annotations });
@@ -2054,13 +2087,13 @@
                 delete nodesObj[nodeId];
             };
 
-            const handleSaveNode = (paneIndex, type, idOrParentId, parentAnnotationId, question, sections, displayKind) => {
+            const handleSaveNode = (paneIndex, type, idOrParentId, parentAnnotationId, topic, sections, displayKind) => {
                 if (type === 'add') {
                     const newNodeId = generateId();
                     const parentId = idOrParentId;
                     setNodes(prev => {
                         const next = { ...prev };
-                        next[newNodeId] = { id: newNodeId, parentId: parentId || null, parentAnnotationId: parentAnnotationId || null, question, displayKind: normalizeDisplayKind(displayKind), sections, children: [] };
+                        next[newNodeId] = { id: newNodeId, parentId: parentId || null, parentAnnotationId: parentAnnotationId || null, topic, displayKind: normalizeDisplayKind(displayKind), sections, children: [] };
                         if (parentId && next[parentId]) next[parentId] = { ...next[parentId], children: [...next[parentId].children, newNodeId] };
                         return next;
                     });
@@ -2070,8 +2103,8 @@
                     setPanes(prev => { const next = [...prev]; next[paneIndex] = { type: 'view', nodeId: newNodeId }; return next; });
                 } else {
                     const nodeId = idOrParentId;
-                    if (nodeId === 'root') setCurrentProjectName(question);
-                    setNodes(prev => ({ ...prev, [nodeId]: { ...prev[nodeId], question, sections, displayKind: normalizeDisplayKind(displayKind) } }));
+                    if (nodeId === 'root') setCurrentProjectName(topic);
+                    setNodes(prev => ({ ...prev, [nodeId]: { ...prev[nodeId], topic, sections, displayKind: normalizeDisplayKind(displayKind) } }));
                     setPanes(prev => { const next = [...prev]; next[paneIndex] = { type: 'view', nodeId }; return next; });
                 }
             };
@@ -2230,7 +2263,7 @@
                     } else {
                         let nodeId = p.nodeId || p.parentId;
                         const node = nodes[nodeId];
-                        if (node) path.push({ title: node.question, isLast: i === paneIndex });
+                        if (node) path.push({ title: node.topic, isLast: i === paneIndex });
                     }
                 }
                 return path;
@@ -2368,7 +2401,7 @@
                     projects: projectIds.map(id => {
                         const meta = projectList.find(p => p.id === id);
                         const data = Storage.getProjectData(id);
-                        return { name: meta?.name || '名前なし', category: meta?.category || '未分類', nodes: data?.nodes || {}, annotations: data?.annotations || [], createdAt: meta?.createdAt, updatedAt: meta?.updatedAt };
+                        return { name: meta?.name || '名前なし', category: meta?.category || '未分類', nodes: nodesToArray(data?.nodes || {}), annotations: data?.annotations || [], createdAt: meta?.createdAt, updatedAt: meta?.updatedAt };
                     })
                 };
                 const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
@@ -2379,7 +2412,11 @@
             const exportAllProjects = () => doExport(projectList.map(p => p.id));
             const exportSingleProject = (id) => doExport([id]);
 
-            const isImportableProject = (value) => isPlainObject(value) && isPlainObject(value.nodes) && isPlainObject(value.nodes.root);
+            const isImportableProject = (value) => {
+                if (!isPlainObject(value)) return false;
+                if (Array.isArray(value.nodes)) return value.nodes.some(n => n.id === 'root');
+                return isPlainObject(value.nodes) && isPlainObject(value.nodes.root);
+            };
             const normalizeImportTargets = (list) => {
                 const targets = (Array.isArray(list) ? list : []).filter(isImportableProject);
                 return targets.length > 0 ? targets : null;
@@ -2416,7 +2453,7 @@
                 let count = 0;
                 targets.forEach(proj => {
                     const id = generateId(); const now = Date.now();
-                    const migratedNodes = migrateNodes(isPlainObject(proj.nodes) ? proj.nodes : {});
+                    const migratedNodes = migrateNodes(normalizeImportNodes(proj));
                     const migratedAnnotations = migrateAnnotations(Array.isArray(proj.annotations) ? proj.annotations : []);
                     const manualOrder = newList.reduce((max, p) => Math.max(max, Number.isFinite(p.manualOrder) ? p.manualOrder : 0), -1) + 1;
                     newList.unshift({
@@ -2473,7 +2510,7 @@
                 let count = 0;
                 targets.forEach(proj => {
                     const id = generateId(); const now = Date.now();
-                    const migratedNodes = migrateNodes(isPlainObject(proj.nodes) ? proj.nodes : {});
+                    const migratedNodes = migrateNodes(normalizeImportNodes(proj));
                     const migratedAnnotations = migrateAnnotations(Array.isArray(proj.annotations) ? proj.annotations : []);
                     const manualOrder = newList.reduce((max, p) => Math.max(max, Number.isFinite(p.manualOrder) ? p.manualOrder : 0), -1) + 1;
                     newList.unshift({
@@ -2698,7 +2735,7 @@
                                                 key={`pane-${index}-${pane.type}-${pane.scrollToSectionId || ''}`}
                                                 mode={pane.type}
                                                 isTopLevel={isTopLevel}
-                                                initialQuestion={node?.question || ''}
+                                                initialTopic={node?.topic || ''}
                                                 initialSections={node?.sections || null}
                                                 initialDisplayKind={node?.displayKind || preferredDisplayKind}
                                                 breadcrumb={breadcrumb}

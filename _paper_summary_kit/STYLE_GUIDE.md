@@ -120,7 +120,7 @@
 各 section node には:
 
 - そのまとまり全体の概観を 1 つ置く
-- `children` に、その中身を並べる
+- 親子関係は `parentId` で表し、その section node に属する leaf を続けて並べる
 
 ### 例
 

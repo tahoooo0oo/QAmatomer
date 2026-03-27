@@ -133,7 +133,7 @@
   "projects": [
     {
       "name": "プロジェクト名",
-      "nodes": { ... },
+      "nodes": [ ... ],
       "annotations": [ ... ]
     }
   ]

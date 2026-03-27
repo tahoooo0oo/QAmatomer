@@ -50,7 +50,8 @@ _summaries/
 - 実データは `projects` 配列に入れる
 - 通常は `projects` に 1 件だけ入れればよい
 - `projects[0].annotations` は原則 `[]`
-- `nodes` は配列ではなく、`id` をキーにした辞書で書く
+- `nodes` は **配列** で書く。全ノードを **深さ優先順**（親 → その子たち → 次の兄弟）で並べる
+- `children` フィールドは **書かない**。親子関係は `parentId` だけで表す
 - JSON として有効な形式で出力する
 
 ## ツリー構造
@@ -97,7 +98,7 @@ root
 各 section node では:
 
 - そのまとまり全体の概観を 1 つ置く
-- `children` に leaf node を並べる
+- 親子関係は `parentId` で表す（`children` フィールドは書かない）
 
 概観では、次のような中身を先に示す。
 
@@ -115,26 +116,6 @@ root
 - `A -> B -> C` のような因果や依存の流れを示す
 - `土台 / 中心 / 帰結` のような層構造を示す
 - 「何と何が対立し、何が鍵なのか」を 1-2 文で明示する
-
-模式図は簡単なテキスト表現でよい。たとえば次のような形を使ってよい。
-
-```text
-前提
-  ↓
-中心主張
-  ↓
-含意
-```
-
-```text
-立場A ---- 対立点 ---- 立場B
-   \                  /
-    \---- 共通前提 ---/
-```
-
-```text
-入力 -> 処理 -> 出力
-```
 
 避けること:
 
@@ -155,13 +136,21 @@ leaf node は、次のどれかの単位で作る。
 - 1つの比較テーマ
 - 1つの手順や判断基準
 
+leaf には次の 3 種類のうち少なくとも 2 種を入れること:
+
+1. **何か** — 定義・主張・事実・手順
+2. **なぜか** — 理由・根拠・仕組みの核
+3. **何が変わるか** — 帰結・比較・反例・限界・応用
+
+1 種だけの leaf は避ける。特に「定義だけ」「主張だけ」「例だけ」は薄すぎる。
+
 leaf の中では、必要に応じて次を section として並べてよい。
 
 - exact な主張
-- 意味
+- 意味・直感
 - 根拠
 - 例
-- 注意点
+- 注意点・限界
 
 ただし、leaf の下にさらに子ノードを作ってはいけない。
 
@@ -181,6 +170,8 @@ leaf の中では、必要に応じて次を section として並べてよい。
 
 ## 最小テンプレ
 
+`nodes` は配列。深さ優先順（親 → その子たち → 次の兄弟）で並べる。
+
 ```json
 {
   "type": "annotator-qa-export",
@@ -193,140 +184,83 @@ leaf の中では、必要に応じて次を section として並べてよい。
       "createdAt": 1774447326000,
       "updatedAt": 1774447326000,
       "annotations": [],
-      "nodes": {
-        "root": {
+      "nodes": [
+        {
           "id": "root",
           "parentId": null,
-          "question": "このまとめ全体の問い",
+          "topic": "このまとめ全体のトピック",
           "sections": [
-            {
-              "id": "root-s1",
-              "title": "対象の説明",
-              "content": "何を source にして何をまとめるかを書く。"
-            },
-            {
-              "id": "root-s2",
-              "title": "一言まとめ",
-              "content": "このテーマの核心を短く書く。"
-            },
-            {
-              "id": "root-s3",
-              "title": "重要ポイントの全体像",
-              "content": "比較表・箇条書き・関係図などで全体像を書く。"
-            },
-            {
-              "id": "root-s4",
-              "title": "このまとめの構成",
-              "content": "下の section node をどう読むかを書く。"
-            }
-          ],
-          "children": ["background", "core", "qa", "guide"]
+            { "id": "root-s1", "title": "対象の説明",         "content": "何を source にして何をまとめるかを書く。" },
+            { "id": "root-s2", "title": "一言まとめ",         "content": "このテーマの核心を短く書く。" },
+            { "id": "root-s3", "title": "重要ポイントの全体像", "content": "比較表・箇条書き・関係図などで全体像を書く。" },
+            { "id": "root-s4", "title": "このまとめの構成",   "content": "下の section node をどう読むかを書く。" }
+          ]
         },
-        "background": {
+        {
           "id": "background",
           "parentId": "root",
-          "question": "前提や背景",
+          "topic": "前提や背景",
           "sections": [
-            {
-              "id": "background-s1",
-              "title": "概観",
-              "content": "このまとまり全体の核心を書く。"
-            }
-          ],
-          "children": ["terms", "context"]
+            { "id": "background-s1", "title": "概観", "content": "このまとまり全体の核心を書く。" }
+          ]
         },
-        "terms": {
+        {
           "id": "terms",
           "parentId": "background",
-          "question": "基本用語",
+          "topic": "基本用語",
           "sections": [
-            {
-              "id": "terms-s1",
-              "title": "定義",
-              "content": "用語の定義や意味を書く。"
-            }
-          ],
-          "children": []
+            { "id": "terms-s1", "title": "定義", "content": "用語の定義や意味を書く。" }
+          ]
         },
-        "context": {
+        {
           "id": "context",
           "parentId": "background",
-          "question": "背景事情",
+          "topic": "背景事情",
           "sections": [
-            {
-              "id": "context-s1",
-              "title": "ポイント",
-              "content": "背景や前提条件を書く。"
-            }
-          ],
-          "children": []
+            { "id": "context-s1", "title": "ポイント", "content": "背景や前提条件を書く。" }
+          ]
         },
-        "core": {
+        {
           "id": "core",
           "parentId": "root",
-          "question": "中心内容",
+          "topic": "中心内容",
           "sections": [
-            {
-              "id": "core-s1",
-              "title": "概観",
-              "content": "この節の結論・比較・関係を先に書く。"
-            }
-          ],
-          "children": ["claim", "example"]
+            { "id": "core-s1", "title": "概観", "content": "この節の結論・比較・関係を先に書く。" }
+          ]
         },
-        "claim": {
+        {
           "id": "claim",
           "parentId": "core",
-          "question": "中心主張",
+          "topic": "中心主張",
           "sections": [
-            {
-              "id": "claim-s1",
-              "title": "主張",
-              "content": "何が重要な主張かを書く。"
-            }
-          ],
-          "children": []
+            { "id": "claim-s1", "title": "主張", "content": "何が重要な主張かを書く。" }
+          ]
         },
-        "example": {
+        {
           "id": "example",
           "parentId": "core",
-          "question": "具体例",
+          "topic": "具体例",
           "sections": [
-            {
-              "id": "example-s1",
-              "title": "例",
-              "content": "代表例や応用例を書く。"
-            }
-          ],
-          "children": []
+            { "id": "example-s1", "title": "例", "content": "代表例や応用例を書く。" }
+          ]
         },
-        "qa": {
+        {
           "id": "qa",
           "parentId": "root",
-          "question": "追加の質問と回答",
+          "topic": "追加の質問と回答",
           "sections": [
-            {
-              "id": "qa-s1",
-              "title": "概観",
-              "content": "このまとめに対して後から寄せられた質問と回答を収録する。"
-            }
-          ],
-          "children": []
+            { "id": "qa-s1", "title": "概観", "content": "このまとめに対して後から寄せられた質問と回答を収録する。" }
+          ]
         },
-        "guide": {
+        {
           "id": "guide",
           "parentId": "root",
-          "question": "ガイド",
+          "topic": "ガイド",
           "sections": [
-            {
-              "id": "guide-s1",
-              "title": "読み方",
-              "content": "どの順で読むと分かりやすいかを書く。"
-            }
-          ],
-          "children": []
+            { "id": "guide-s1", "title": "読み方", "content": "どの順で読むと分かりやすいかを書く。" }
+          ]
         }
-      }
+      ]
     }
   ]
 }
@@ -337,13 +271,14 @@ leaf の中では、必要に応じて次を section として並べてよい。
 - `type` は `annotator-qa-export` か
 - `version` は `2` か
 - `projects[0].annotations` は `[]` か
-- `root` があるか
-- `root` の `children` が section node を指しているか
-- section node の `children` が leaf node を指しているか
-- leaf node の `children` が `[]` か
+- `nodes` は配列か（辞書になっていないか）
+- `children` フィールドが存在しないか
+- 全ノードに `parentId` があるか（root のみ `null`、それ以外は親の id 文字列）
+- 全ノードのフィールド名が `topic` になっているか（`title` や `question` になっていないか）
+- 全 section に `id` があるか
+- 配列の順序が深さ優先か（section の直後にその leaf が続いているか）
 - `guide` を除き、3段以上に深くなっていないか
 - 出力先が `_summaries/` の下か
-- 出力先が指定された作業フォルダの中になっているか
 
 ## 参考
 
