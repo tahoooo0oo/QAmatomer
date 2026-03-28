@@ -1976,6 +1976,15 @@
                             ? keyNavPaneIndex : lastViewIdx;
                         const focusedPane = panes[focusedIdx];
                         if (!focusedPane?.nodeId) return;
+                        if (e.shiftKey && ['ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                            const nextIdx = focusedIdx + (e.key === 'ArrowRight' ? 1 : -1);
+                            if (nextIdx >= 0 && nextIdx <= lastViewIdx && panes[nextIdx]?.type === 'view') {
+                                e.preventDefault();
+                                setKeyNavPaneIndex(nextIdx);
+                                setKeyNavChildId(null);
+                            }
+                            return;
+                        }
                         if (e.shiftKey && ['ArrowUp', 'ArrowDown'].includes(e.key)) {
                             const currentNode = nodes[focusedPane.nodeId];
                             const parentNode = currentNode?.parentId ? nodes[currentNode.parentId] : null;
